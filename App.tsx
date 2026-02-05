@@ -23,7 +23,7 @@ import {
 import { exportToPdf, A4_WIDTH, A4_HEIGHT, MARGIN } from './services/exportPdf';
 import { exportToDxf } from './services/exportDxf';
 import { calculatePrintLayout } from './services/layout';
-import { autoDimensionCircle, autoDimensionRectangle, autoDimensionAll } from './services/autoDimension';
+import { autoDimensionCircle, autoDimensionRectangle, autoDimensionAll, DimensionStyle } from './services/autoDimension';
 import {
   SelectIcon,
   LineIcon,
@@ -64,6 +64,7 @@ const App: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<string>('Ready');
   const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>('auto');
 
   const [titleBlock, setTitleBlock] = useState<TitleBlockData>({
     detailName: 'Untitled Detail',
@@ -719,7 +720,7 @@ const App: React.FC = () => {
   };
   
   const handleAutoDimensionAll = () => {
-      const newDimensions = autoDimensionAll(drawingState);
+      const newDimensions = autoDimensionAll(drawingState, dimensionStyle);
       if(newDimensions.length > 0) {
           const newState = produce(drawingState, draft => {
             draft.dimensions.push(...newDimensions);
@@ -868,10 +869,22 @@ const App: React.FC = () => {
                 <span>Load</span>
               </button>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".qcad,application/json" style={{ display: 'none' }} />
-              <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 rounded-md text-sm font-semibold flex items-center space-x-1" title="Automatically dimension all features">
-                <AutoDimensionAllIcon />
-                <span>Auto Dimension All</span>
-              </button>
+              <div className="flex items-center space-x-1">
+                <select 
+                  value={dimensionStyle} 
+                  onChange={(e) => setDimensionStyle(e.target.value as DimensionStyle)}
+                  className="px-2 py-1 bg-gray-700 text-sm rounded-l-md border-r border-gray-600 focus:outline-none"
+                  title="Dimension style"
+                >
+                  <option value="auto">Auto</option>
+                  <option value="shapes-only">Shapes Only</option>
+                  <option value="full">Full</option>
+                </select>
+                <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 rounded-r-md text-sm font-semibold flex items-center space-x-1" title="Automatically dimension all features">
+                  <AutoDimensionAllIcon />
+                  <span>Dimension</span>
+                </button>
+              </div>
               <button
                 onClick={() => setIsPreviewMode(!isPreviewMode)}
                 className={`px-3 py-1 rounded-md text-sm font-semibold flex items-center space-x-1 ${isPreviewMode ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}

@@ -1,8 +1,12 @@
-
-import { Circle, Shape, Dimension, Point, Rectangle, DrawingState } from '../types';
+import { Circle, Shape, Dimension, Point, Rectangle, DrawingState, Line } from '../types';
 import { getShapeBoundingBox } from './geometry';
 
-type BoundingBox = { minX: number, minY: number, maxX: number, maxY: number };
+// Styl wymiarowania
+export type DimensionStyle = 'auto' | 'shapes-only' | 'full';
+
+type BoundingBox = { minX: number; minY: number; maxX: number; maxY: number };
+
+// ============== POMOCNICZE ==============
 
 const getDimensionBoundingBox = (dim: Dimension): BoundingBox => {
     const { p1, p2, offset } = dim;
@@ -10,17 +14,17 @@ const getDimensionBoundingBox = (dim: Dimension): BoundingBox => {
     const perpAngle = angle + Math.PI / 2;
     const dx = Math.cos(perpAngle) * offset;
     const dy = Math.sin(perpAngle) * offset;
-    
-    const dimP1 = {x: p1.x + dx, y: p1.y + dy};
-    const dimP2 = {x: p2.x + dx, y: p2.y + dy};
 
-    const buffer = 10; 
+    const dimP1 = { x: p1.x + dx, y: p1.y + dy };
+    const dimP2 = { x: p2.x + dx, y: p2.y + dy };
+
+    const buffer = 12;
     return {
         minX: Math.min(dimP1.x, dimP2.x) - buffer,
         minY: Math.min(dimP1.y, dimP2.y) - buffer,
         maxX: Math.max(dimP1.x, dimP2.x) + buffer,
         maxY: Math.max(dimP1.y, dimP2.y) + buffer,
-    }
+    };
 };
 
 const doBoxesIntersect = (boxA: BoundingBox, boxB: BoundingBox): boolean => {
@@ -36,79 +40,191 @@ const findOptimalOffset = (
     p1: Point,
     p2: Point,
     existingDimensions: Dimension[],
-    initialOffset = 20,
-    increment = 15
+    initialOffset = 25,
+    increment = 18
 ): number => {
     let offset = initialOffset;
-    const maxAttempts = 20;
+    const maxAttempts = 15;
 
     for (let i = 0; i < maxAttempts; i++) {
         const tempDim: Dimension = { id: 'temp', layerId: 'dimensions', p1, p2, offset };
         const tempBox = getDimensionBoundingBox(tempDim);
-        
+
         let hasCollision = false;
-        for(const existingDim of existingDimensions) {
+        for (const existingDim of existingDimensions) {
             const existingBox = getDimensionBoundingBox(existingDim);
             if (doBoxesIntersect(tempBox, existingBox)) {
                 hasCollision = true;
                 break;
             }
         }
-        
+
         if (!hasCollision) {
             return offset;
         }
-        
+
         offset = initialOffset > 0 ? offset + increment : offset - increment;
     }
     return offset;
 };
 
-const findNearestDimensionPoints = (center: Point, otherShapes: Shape[]): { hPoint: Point, vPoint: Point } => {
-    if (otherShapes.length === 0) {
-        return {
-            hPoint: { x: 0, y: center.y },
-            vPoint: { x: center.x, y: 0 }
-        };
+const generateId = (prefix: string): string => {
+    return `${prefix}-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+};
+
+// ============== WYKRYWANIE KONTURU ==============
+
+const findOuterContour = (shapes: Shape[]): Rectangle | null => {
+    // Szukamy największego prostokąta który może być konturem detalu
+    const rectangles = shapes.filter((s): s is Rectangle => s.type === 'rectangle');
+    if (rectangles.length === 0) return null;
+
+    let largestRect: Rectangle | null = null;
+    let largestArea = 0;
+
+    for (const rect of rectangles) {
+        const bbox = getShapeBoundingBox(rect);
+        const area = (bbox.maxX - bbox.minX) * (bbox.maxY - bbox.minY);
+        if (area > largestArea) {
+            largestArea = area;
+            largestRect = rect;
+        }
     }
 
-    let minHDist = Infinity;
-    let bestHPoint: Point | null = null;
-    let minVDist = Infinity;
-    let bestVPoint: Point | null = null;
+    return largestRect;
+};
 
-    otherShapes.forEach(shape => {
-        const bbox = getShapeBoundingBox(shape);
-        // Horizontal check (find nearest vertical edge)
-        let distToLeft = center.x - bbox.maxX;
-        if (distToLeft >= 0 && distToLeft < minHDist) {
-            minHDist = distToLeft;
-            bestHPoint = { x: bbox.maxX, y: center.y };
-        }
-        let distToRight = bbox.minX - center.x;
-        if (distToRight >= 0 && distToRight < minHDist) {
-            minHDist = distToRight;
-            bestHPoint = { x: bbox.minX, y: center.y };
-        }
+const isShapeInsideContour = (shape: Shape, contour: Rectangle): boolean => {
+    if (shape.id === contour.id) return false;
 
-        // Vertical check (find nearest horizontal edge)
-        let distToTop = center.y - bbox.maxY;
-        if (distToTop >= 0 && distToTop < minVDist) {
-            minVDist = distToTop;
-            bestVPoint = { x: center.x, y: bbox.maxY };
-        }
-        let distToBottom = bbox.minY - center.y;
-        if (distToBottom >= 0 && distToBottom < minVDist) {
-            minVDist = distToBottom;
-            bestVPoint = { x: center.x, y: bbox.minY };
-        }
-    });
+    const contourBbox = getShapeBoundingBox(contour);
+    const shapeBbox = getShapeBoundingBox(shape);
+
+    // Sprawdzamy czy kształt jest w całości wewnątrz konturu (z małym marginesem)
+    const margin = 1;
+    return (
+        shapeBbox.minX >= contourBbox.minX - margin &&
+        shapeBbox.maxX <= contourBbox.maxX + margin &&
+        shapeBbox.minY >= contourBbox.minY - margin &&
+        shapeBbox.maxY <= contourBbox.maxY + margin
+    );
+};
+
+// ============== WYMIARY KSZTAŁTÓW ==============
+
+const createCircleDiameterDimension = (
+    circle: Circle,
+    existingDimensions: Dimension[]
+): Dimension => {
+    // Wymiar średnicy - zawsze poziomy, z prawej strony koła
+    const p1: Point = { x: circle.center.x - circle.radius, y: circle.center.y };
+    const p2: Point = { x: circle.center.x + circle.radius, y: circle.center.y };
+    
+    const offset = findOptimalOffset(p1, p2, existingDimensions, circle.radius + 20, 15);
 
     return {
-        hPoint: bestHPoint || { x: 0, y: center.y },
-        vPoint: bestVPoint || { x: center.x, y: 0 },
+        id: generateId('dim-dia'),
+        layerId: 'dimensions',
+        p1,
+        p2,
+        offset,
+        text: `ø${(circle.radius * 2).toFixed(1)}`,
     };
 };
+
+const createRectangleDimensions = (
+    rect: Rectangle,
+    existingDimensions: Dimension[]
+): Dimension[] => {
+    const dims: Dimension[] = [];
+    const bbox = getShapeBoundingBox(rect);
+    const width = bbox.maxX - bbox.minX;
+    const height = bbox.maxY - bbox.minY;
+
+    // Wymiar szerokości - na dole
+    const widthP1 = { x: bbox.minX, y: bbox.minY };
+    const widthP2 = { x: bbox.maxX, y: bbox.minY };
+    const widthOffset = findOptimalOffset(widthP1, widthP2, existingDimensions, -25, -18);
+    dims.push({
+        id: generateId('dim-w'),
+        layerId: 'dimensions',
+        p1: widthP1,
+        p2: widthP2,
+        offset: widthOffset,
+        text: width.toFixed(1),
+    });
+
+    // Wymiar wysokości - z lewej strony
+    const heightP1 = { x: bbox.minX, y: bbox.minY };
+    const heightP2 = { x: bbox.minX, y: bbox.maxY };
+    const heightOffset = findOptimalOffset(heightP1, heightP2, [...existingDimensions, ...dims], -25, -18);
+    dims.push({
+        id: generateId('dim-h'),
+        layerId: 'dimensions',
+        p1: heightP1,
+        p2: heightP2,
+        offset: heightOffset,
+        text: height.toFixed(1),
+    });
+
+    return dims;
+};
+
+// ============== WYMIARY POZYCYJNE ==============
+
+const createPositionalDimensions = (
+    shape: Shape,
+    basePoint: Point,
+    existingDimensions: Dimension[]
+): Dimension[] => {
+    const dims: Dimension[] = [];
+    const shapeBbox = getShapeBoundingBox(shape);
+
+    // Punkt referencyjny kształtu
+    let refPoint: Point;
+    if (shape.type === 'circle') {
+        refPoint = shape.center;
+    } else {
+        // Dla prostokątów - lewy dolny róg
+        refPoint = { x: shapeBbox.minX, y: shapeBbox.minY };
+    }
+
+    // Wymiar poziomy (X) - od punktu bazowego do punktu referencyjnego
+    const deltaX = refPoint.x - basePoint.x;
+    if (Math.abs(deltaX) > 0.1) {
+        const hP1 = { x: basePoint.x, y: basePoint.y };
+        const hP2 = { x: refPoint.x, y: basePoint.y };
+        const hOffset = findOptimalOffset(hP1, hP2, existingDimensions, -40, -18);
+        dims.push({
+            id: generateId('dim-pos-x'),
+            layerId: 'dimensions',
+            p1: hP1,
+            p2: hP2,
+            offset: hOffset,
+            text: deltaX.toFixed(1),
+        });
+    }
+
+    // Wymiar pionowy (Y) - od punktu bazowego do punktu referencyjnego
+    const deltaY = refPoint.y - basePoint.y;
+    if (Math.abs(deltaY) > 0.1) {
+        const vP1 = { x: basePoint.x, y: basePoint.y };
+        const vP2 = { x: basePoint.x, y: refPoint.y };
+        const vOffset = findOptimalOffset(vP1, vP2, [...existingDimensions, ...dims], -40, -18);
+        dims.push({
+            id: generateId('dim-pos-y'),
+            layerId: 'dimensions',
+            p1: vP1,
+            p2: vP2,
+            offset: vOffset,
+            text: deltaY.toFixed(1),
+        });
+    }
+
+    return dims;
+};
+
+// ============== GŁÓWNE FUNKCJE EKSPORTOWANE ==============
 
 export const autoDimensionCircle = (
     circle: Circle,
@@ -116,37 +232,21 @@ export const autoDimensionCircle = (
     allDimensions: Dimension[]
 ): Dimension[] => {
     const newDimensions: Dimension[] = [];
-    const otherShapes = allShapes.filter(s => s.id !== circle.id);
+    const currentDims = [...allDimensions];
 
-    // 1. Diameter Dimension
-    const diameterP1 = { x: circle.center.x, y: circle.center.y - circle.radius };
-    const diameterP2 = { x: circle.center.x, y: circle.center.y + circle.radius };
-    const diameterOffset = findOptimalOffset(
-        diameterP1, 
-        diameterP2,
-        allDimensions,
-        circle.radius + 20
-    );
-    const diameterDim: Dimension = {
-        id: `dim-${Date.now()}-dia`,
-        layerId: 'dimensions',
-        p1: diameterP1,
-        p2: diameterP2,
-        offset: diameterOffset,
-        text: `ø${(circle.radius * 2).toFixed(2)}`
-    };
-    newDimensions.push(diameterDim);
+    // Wymiar średnicy
+    const diaDim = createCircleDiameterDimension(circle, currentDims);
+    newDimensions.push(diaDim);
+    currentDims.push(diaDim);
 
-    // 2. Positional Dimensions
-    const { hPoint, vPoint } = findNearestDimensionPoints(circle.center, otherShapes);
-
-    const hOffset = findOptimalOffset( hPoint, { x: circle.center.x, y: hPoint.y }, [...allDimensions, ...newDimensions] );
-    const hDim: Dimension = { id: `dim-${Date.now()}-h`, layerId: 'dimensions', p1: hPoint, p2: { x: circle.center.x, y: hPoint.y }, offset: hOffset };
-    newDimensions.push(hDim);
-
-    const vOffset = findOptimalOffset( vPoint, { x: vPoint.x, y: circle.center.y }, [...allDimensions, ...newDimensions] );
-    const vDim: Dimension = { id: `dim-${Date.now()}-v`, layerId: 'dimensions', p1: vPoint, p2: { x: vPoint.x, y: circle.center.y }, offset: vOffset };
-    newDimensions.push(vDim);
+    // Sprawdź czy koło jest wewnątrz konturu
+    const contour = findOuterContour(allShapes);
+    if (contour && isShapeInsideContour(circle, contour)) {
+        const contourBbox = getShapeBoundingBox(contour);
+        const basePoint = { x: contourBbox.minX, y: contourBbox.minY };
+        const posDims = createPositionalDimensions(circle, basePoint, currentDims);
+        newDimensions.push(...posDims);
+    }
 
     return newDimensions;
 };
@@ -157,128 +257,109 @@ export const autoDimensionRectangle = (
     allDimensions: Dimension[]
 ): Dimension[] => {
     const newDimensions: Dimension[] = [];
-    const otherShapes = allShapes.filter(s => s.id !== rect.id);
+    const currentDims = [...allDimensions];
 
-    const minX = Math.min(rect.p1.x, rect.p2.x);
-    const minY = Math.min(rect.p1.y, rect.p2.y);
-    const maxX = Math.max(rect.p1.x, rect.p2.x);
-    const maxY = Math.max(rect.p1.y, rect.p2.y);
+    // Wymiary prostokąta (szerokość, wysokość)
+    const rectDims = createRectangleDimensions(rect, currentDims);
+    newDimensions.push(...rectDims);
+    currentDims.push(...rectDims);
 
-    const widthP1 = { x: minX, y: maxY }; const widthP2 = { x: maxX, y: maxY };
-    const widthOffset = findOptimalOffset(widthP1, widthP2, allDimensions, 20);
-    newDimensions.push({ id: `dim-${Date.now()}-w`, layerId: 'dimensions', p1: widthP1, p2: widthP2, offset: widthOffset });
-
-    const heightP1 = { x: maxX, y: minY }; const heightP2 = { x: maxX, y: maxY };
-    const heightOffset = findOptimalOffset(heightP1, heightP2, [...allDimensions, ...newDimensions], 20);
-    newDimensions.push({ id: `dim-${Date.now()}-h`, layerId: 'dimensions', p1: heightP1, p2: heightP2, offset: heightOffset });
-
-    const refPoint = { x: minX, y: minY };
-    const { hPoint, vPoint } = findNearestDimensionPoints(refPoint, otherShapes);
-    
-    const hPosP1 = {x: hPoint.x, y: refPoint.y}; const hPosP2 = refPoint;
-    const hPosOffset = findOptimalOffset(hPosP1, hPosP2, [...allDimensions, ...newDimensions], -20, -15);
-    newDimensions.push({ id: `dim-${Date.now()}-hpos`, layerId: 'dimensions', p1: hPosP1, p2: hPosP2, offset: hPosOffset });
-
-    const vPosP1 = {x: refPoint.x, y: vPoint.y}; const vPosP2 = refPoint;
-    const vPosOffset = findOptimalOffset(vPosP1, vPosP2, [...allDimensions, ...newDimensions], -20, -15);
-    newDimensions.push({ id: `dim-${Date.now()}-vpos`, layerId: 'dimensions', p1: vPosP1, p2: vPosP2, offset: vPosOffset });
+    // Sprawdź czy prostokąt jest wewnątrz konturu (i nie jest sam konturem)
+    const contour = findOuterContour(allShapes);
+    if (contour && contour.id !== rect.id && isShapeInsideContour(rect, contour)) {
+        const contourBbox = getShapeBoundingBox(contour);
+        const basePoint = { x: contourBbox.minX, y: contourBbox.minY };
+        const posDims = createPositionalDimensions(rect, basePoint, currentDims);
+        newDimensions.push(...posDims);
+    }
 
     return newDimensions;
 };
 
-export const autoDimensionAll = (drawingState: DrawingState): Dimension[] => {
+export const autoDimensionAll = (
+    drawingState: DrawingState,
+    style: DimensionStyle = 'auto'
+): Dimension[] => {
     const { shapes, dimensions } = drawingState;
     if (shapes.length === 0) return [];
 
-    let newDimensions: Dimension[] = [];
-    const currentAndNewDimensions = [...dimensions];
+    const newDimensions: Dimension[] = [];
+    const currentDims = [...dimensions];
 
-    // 1. Calculate global bounding box and key points
-    const globalBbox = shapes.reduce((acc, shape) => {
-        const sBbox = getShapeBoundingBox(shape);
-        return {
-            minX: Math.min(acc.minX, sBbox.minX),
-            minY: Math.min(acc.minY, sBbox.minY),
-            maxX: Math.max(acc.maxX, sBbox.maxX),
-            maxY: Math.max(acc.maxY, sBbox.maxY),
-        }
-    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
-    
-    const keyPoints = shapes.flatMap(s => {
-        if (s.type === 'circle') return [s.center];
-        if (s.type === 'rectangle') {
-            const rbox = getShapeBoundingBox(s);
-            return [{x: rbox.minX, y: rbox.minY}, {x: rbox.maxX, y: rbox.maxY}];
-        }
-        if (s.type === 'line') return [s.p1, s.p2];
-        return [];
-    });
-    const uniqueXCoords = [...new Set(keyPoints.map(p => p.x))].sort((a,b) => a-b);
-    const uniqueYCoords = [...new Set(keyPoints.map(p => p.y))].sort((a,b) => a-b);
+    // Znajdź kontur (największy prostokąt)
+    const contour = findOuterContour(shapes);
+    const contourBbox = contour ? getShapeBoundingBox(contour) : null;
+    const basePoint = contourBbox 
+        ? { x: contourBbox.minX, y: contourBbox.minY }
+        : null;
 
-    const BASELINE_INITIAL_OFFSET = 25;
-    const BASELINE_INCREMENT = 15;
+    // Określ które kształty są wewnątrz konturu
+    const innerShapes = contour 
+        ? shapes.filter(s => isShapeInsideContour(s, contour))
+        : [];
 
-    // 2. Add Baseline Dimensions in compact, predictable rows
-    let yLevel = 0;
-    uniqueXCoords.forEach(x => {
-        if (x === globalBbox.minX) return; // Skip datum line
-        const p1 = { x: globalBbox.minX, y: globalBbox.minY };
-        const p2 = { x: x, y: globalBbox.minY };
-        const offset = -(BASELINE_INITIAL_OFFSET + (yLevel * BASELINE_INCREMENT));
-        const dim: Dimension = {id: `dim-pos-x-${x}`, layerId: 'dimensions', p1, p2, offset};
-        newDimensions.push(dim);
-        currentAndNewDimensions.push(dim);
-        yLevel++;
-    });
+    const hasContourWithInnerShapes = contour && innerShapes.length > 0;
 
-    let xLevel = 0;
-    uniqueYCoords.forEach(y => {
-        if (y === globalBbox.minY) return; // Skip datum line
-        const p1 = { x: globalBbox.minX, y: globalBbox.minY };
-        const p2 = { x: globalBbox.minX, y: y };
-        const offset = -(BASELINE_INITIAL_OFFSET + (xLevel * BASELINE_INCREMENT));
-        const dim: Dimension = {id: `dim-pos-y-${y}`, layerId: 'dimensions', p1, p2, offset};
-        newDimensions.push(dim);
-        currentAndNewDimensions.push(dim);
-        xLevel++;
-    });
+    // Określ czy dodawać wymiary pozycyjne
+    const addPositionalDims = 
+        style === 'full' || 
+        (style === 'auto' && hasContourWithInnerShapes);
 
-    // 3. Add Overall Dimensions just outside the baseline dimensions
-    const overallYOffset = -(BASELINE_INITIAL_OFFSET + (yLevel * BASELINE_INCREMENT));
-    const overallWidthDim: Dimension = { id: `dim-overall-w`, layerId: 'dimensions', p1: {x: globalBbox.minX, y: globalBbox.minY}, p2: {x: globalBbox.maxX, y: globalBbox.minY}, offset: overallYOffset };
-    newDimensions.push(overallWidthDim);
-    currentAndNewDimensions.push(overallWidthDim);
-    
-    const overallXOffset = -(BASELINE_INITIAL_OFFSET + (xLevel * BASELINE_INCREMENT));
-    const overallHeightDim: Dimension = { id: `dim-overall-h`, layerId: 'dimensions', p1: {x: globalBbox.minX, y: globalBbox.minY}, p2: {x: globalBbox.minX, y: globalBbox.maxY}, offset: overallXOffset };
-    newDimensions.push(overallHeightDim);
-    currentAndNewDimensions.push(overallHeightDim);
+    // 1. Wymiary konturu (jeśli istnieje)
+    if (contour && style !== 'shapes-only') {
+        const contourDims = createRectangleDimensions(contour, currentDims);
+        newDimensions.push(...contourDims);
+        currentDims.push(...contourDims);
+    }
 
-    // 4. Dimension individual features, using findOptimalOffset to place them neatly
-    shapes.forEach(shape => {
+    // 2. Wymiary poszczególnych kształtów
+    for (const shape of shapes) {
+        // Pomiń kontur - już zwymiarowany
+        if (contour && shape.id === contour.id) continue;
+
         if (shape.type === 'circle') {
-            const diameterP1 = { x: shape.center.x, y: shape.center.y - shape.radius };
-            const diameterP2 = { x: shape.center.x, y: shape.center.y + shape.radius };
-            const diameterOffset = findOptimalOffset(diameterP1, diameterP2, currentAndNewDimensions, shape.radius + 15, 10);
-            const dim: Dimension = { id: `dim-${shape.id}-dia`, layerId: 'dimensions', p1: diameterP1, p2: diameterP2, offset: diameterOffset, text: `ø${(shape.radius * 2).toFixed(2)}` };
-            newDimensions.push(dim);
-            currentAndNewDimensions.push(dim);
-        } else if (shape.type === 'rectangle') {
-            const rbox = getShapeBoundingBox(shape);
-            const wP1 = {x: rbox.minX, y: rbox.maxY}; const wP2 = {x: rbox.maxX, y: rbox.maxY};
-            const wOffset = findOptimalOffset(wP1, wP2, currentAndNewDimensions, 15);
-            const wDim: Dimension = {id: `dim-${shape.id}-w`, layerId:'dimensions', p1: wP1, p2: wP2, offset: wOffset};
-            newDimensions.push(wDim);
-            currentAndNewDimensions.push(wDim);
+            // Wymiar średnicy
+            const diaDim = createCircleDiameterDimension(shape, currentDims);
+            newDimensions.push(diaDim);
+            currentDims.push(diaDim);
 
-            const hP1 = {x: rbox.maxX, y: rbox.minY}; const hP2 = {x: rbox.maxX, y: rbox.maxY};
-            const hOffset = findOptimalOffset(hP1, hP2, currentAndNewDimensions, 15);
-            const hDim: Dimension = {id: `dim-${shape.id}-h`, layerId:'dimensions', p1: hP1, p2: hP2, offset: hOffset};
-            newDimensions.push(hDim);
-            currentAndNewDimensions.push(hDim);
+            // Wymiary pozycyjne (jeśli wymagane)
+            if (addPositionalDims && basePoint && isShapeInsideContour(shape, contour!)) {
+                const posDims = createPositionalDimensions(shape, basePoint, currentDims);
+                newDimensions.push(...posDims);
+                currentDims.push(...posDims);
+            }
+        } else if (shape.type === 'rectangle') {
+            // Wymiary prostokąta
+            const rectDims = createRectangleDimensions(shape, currentDims);
+            newDimensions.push(...rectDims);
+            currentDims.push(...rectDims);
+
+            // Wymiary pozycyjne (jeśli wymagane)
+            if (addPositionalDims && basePoint && isShapeInsideContour(shape, contour!)) {
+                const posDims = createPositionalDimensions(shape, basePoint, currentDims);
+                newDimensions.push(...posDims);
+                currentDims.push(...posDims);
+            }
+        } else if (shape.type === 'line') {
+            // Wymiar długości linii
+            const length = Math.sqrt(
+                Math.pow(shape.p2.x - shape.p1.x, 2) + 
+                Math.pow(shape.p2.y - shape.p1.y, 2)
+            );
+            const offset = findOptimalOffset(shape.p1, shape.p2, currentDims, 20, 15);
+            const lineDim: Dimension = {
+                id: generateId('dim-line'),
+                layerId: 'dimensions',
+                p1: shape.p1,
+                p2: shape.p2,
+                offset,
+                text: length.toFixed(1),
+            };
+            newDimensions.push(lineDim);
+            currentDims.push(lineDim);
         }
-    });
+    }
 
     return newDimensions;
 };

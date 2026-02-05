@@ -1,0 +1,6 @@
+
+{
+  "name": "Quick-CAD 2D",
+  "description": "A lightweight, browser-based 2D CAD application for rapid technical drawings of mechanical parts. Features offline support via Service Worker, tools for drawing, dimensioning, layers, and exporting to PDF/DXF.",
+  "requestFramePermissions": []
+}

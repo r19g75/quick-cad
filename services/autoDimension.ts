@@ -132,6 +132,43 @@ const createCircleDiameterDimension = (
     };
 };
 
+// Dedykowana funkcja dla wymiarów konturu - zawsze na zewnątrz, stałe pozycje
+const createContourDimensions = (
+    rect: Rectangle,
+    existingDimensions: Dimension[]
+): Dimension[] => {
+    const dims: Dimension[] = [];
+    const bbox = getShapeBoundingBox(rect);
+    const width = bbox.maxX - bbox.minX;
+    const height = bbox.maxY - bbox.minY;
+
+    // Wymiar szerokości - NA GÓRZE konturu (offset dodatni)
+    const widthP1 = { x: bbox.minX, y: bbox.maxY };
+    const widthP2 = { x: bbox.maxX, y: bbox.maxY };
+    dims.push({
+        id: generateId('dim-contour-w'),
+        layerId: 'dimensions',
+        p1: widthP1,
+        p2: widthP2,
+        offset: 25, // stały offset na górze
+        text: width.toFixed(1),
+    });
+
+    // Wymiar wysokości - Z PRAWEJ strony konturu (offset dodatni)
+    const heightP1 = { x: bbox.maxX, y: bbox.minY };
+    const heightP2 = { x: bbox.maxX, y: bbox.maxY };
+    dims.push({
+        id: generateId('dim-contour-h'),
+        layerId: 'dimensions',
+        p1: heightP1,
+        p2: heightP2,
+        offset: 25, // stały offset z prawej
+        text: height.toFixed(1),
+    });
+
+    return dims;
+};
+
 const createRectangleDimensions = (
     rect: Rectangle,
     existingDimensions: Dimension[]
@@ -172,6 +209,80 @@ const createRectangleDimensions = (
 
 // ============== WYMIARY POZYCYJNE ==============
 
+// Zbiera wszystkie wymiary pozycyjne dla kształtów wewnątrz konturu
+const createAllPositionalDimensions = (
+    innerShapes: Shape[],
+    basePoint: Point,
+    contourBbox: BoundingBox,
+    existingDimensions: Dimension[]
+): Dimension[] => {
+    const dims: Dimension[] = [];
+    
+    // Zbierz punkty referencyjne dla wszystkich kształtów
+    const refPoints: { shape: Shape; point: Point }[] = [];
+    for (const shape of innerShapes) {
+        if (shape.type === 'circle') {
+            refPoints.push({ shape, point: shape.center });
+        } else {
+            const bbox = getShapeBoundingBox(shape);
+            refPoints.push({ shape, point: { x: bbox.minX, y: bbox.minY } });
+        }
+    }
+
+    // Sortuj punkty po X dla wymiarów poziomych
+    const sortedByX = [...refPoints].sort((a, b) => a.point.x - b.point.x);
+    
+    // Sortuj punkty po Y dla wymiarów pionowych
+    const sortedByY = [...refPoints].sort((a, b) => a.point.y - b.point.y);
+
+    // Wymiary poziome (X) - na dole konturu, w uporządkowanych rzędach
+    const baseY = contourBbox.minY;
+    let xDimLevel = 0;
+    const X_DIM_START = -30;
+    const X_DIM_INCREMENT = -22;
+
+    for (const { point } of sortedByX) {
+        const deltaX = point.x - basePoint.x;
+        if (Math.abs(deltaX) < 0.1) continue;
+
+        const offset = X_DIM_START + (xDimLevel * X_DIM_INCREMENT);
+        dims.push({
+            id: generateId('dim-pos-x'),
+            layerId: 'dimensions',
+            p1: { x: basePoint.x, y: baseY },
+            p2: { x: point.x, y: baseY },
+            offset,
+            text: deltaX.toFixed(1),
+        });
+        xDimLevel++;
+    }
+
+    // Wymiary pionowe (Y) - z lewej strony konturu, w uporządkowanych rzędach
+    const baseX = contourBbox.minX;
+    let yDimLevel = 0;
+    const Y_DIM_START = -30;
+    const Y_DIM_INCREMENT = -22;
+
+    for (const { point } of sortedByY) {
+        const deltaY = point.y - basePoint.y;
+        if (Math.abs(deltaY) < 0.1) continue;
+
+        const offset = Y_DIM_START + (yDimLevel * Y_DIM_INCREMENT);
+        dims.push({
+            id: generateId('dim-pos-y'),
+            layerId: 'dimensions',
+            p1: { x: baseX, y: basePoint.y },
+            p2: { x: baseX, y: point.y },
+            offset,
+            text: deltaY.toFixed(1),
+        });
+        yDimLevel++;
+    }
+
+    return dims;
+};
+
+// Stara funkcja - używana dla pojedynczych kształtów
 const createPositionalDimensions = (
     shape: Shape,
     basePoint: Point,
@@ -305,14 +416,14 @@ export const autoDimensionAll = (
         style === 'full' || 
         (style === 'auto' && hasContourWithInnerShapes);
 
-    // 1. Wymiary konturu (jeśli istnieje)
+    // 1. Wymiary konturu (jeśli istnieje) - dedykowana funkcja, wymiary na zewnątrz
     if (contour && style !== 'shapes-only') {
-        const contourDims = createRectangleDimensions(contour, currentDims);
+        const contourDims = createContourDimensions(contour, currentDims);
         newDimensions.push(...contourDims);
         currentDims.push(...contourDims);
     }
 
-    // 2. Wymiary poszczególnych kształtów
+    // 2. Wymiary poszczególnych kształtów (tylko wymiary samych kształtów, bez pozycyjnych)
     for (const shape of shapes) {
         // Pomiń kontur - już zwymiarowany
         if (contour && shape.id === contour.id) continue;
@@ -322,25 +433,11 @@ export const autoDimensionAll = (
             const diaDim = createCircleDiameterDimension(shape, currentDims);
             newDimensions.push(diaDim);
             currentDims.push(diaDim);
-
-            // Wymiary pozycyjne (jeśli wymagane)
-            if (addPositionalDims && basePoint && isShapeInsideContour(shape, contour!)) {
-                const posDims = createPositionalDimensions(shape, basePoint, currentDims);
-                newDimensions.push(...posDims);
-                currentDims.push(...posDims);
-            }
         } else if (shape.type === 'rectangle') {
             // Wymiary prostokąta
             const rectDims = createRectangleDimensions(shape, currentDims);
             newDimensions.push(...rectDims);
             currentDims.push(...rectDims);
-
-            // Wymiary pozycyjne (jeśli wymagane)
-            if (addPositionalDims && basePoint && isShapeInsideContour(shape, contour!)) {
-                const posDims = createPositionalDimensions(shape, basePoint, currentDims);
-                newDimensions.push(...posDims);
-                currentDims.push(...posDims);
-            }
         } else if (shape.type === 'line') {
             // Wymiar długości linii
             const length = Math.sqrt(
@@ -359,6 +456,12 @@ export const autoDimensionAll = (
             newDimensions.push(lineDim);
             currentDims.push(lineDim);
         }
+    }
+
+    // 3. Wymiary pozycyjne - wszystkie naraz, uporządkowane
+    if (addPositionalDims && contour && contourBbox && basePoint && innerShapes.length > 0) {
+        const posDims = createAllPositionalDimensions(innerShapes, basePoint, contourBbox, currentDims);
+        newDimensions.push(...posDims);
     }
 
     return newDimensions;

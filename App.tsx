@@ -945,8 +945,13 @@ const App: React.FC = () => {
         const loadedData = JSON.parse(content);
 
         if (loadedData.drawingState && loadedData.drawingState.shapes && loadedData.drawingState.layers) {
-            setDrawingState(loadedData.drawingState);
-            setHistory([loadedData.drawingState]);
+            // Migracja starych plików - dodaj annotations jeśli brakuje
+            const migratedState = {
+                ...loadedData.drawingState,
+                annotations: loadedData.drawingState.annotations || []
+            };
+            setDrawingState(migratedState);
+            setHistory([migratedState]);
             setHistoryIndex(0);
             if (loadedData.titleBlock) {
                 setTitleBlock(loadedData.titleBlock);
@@ -983,7 +988,11 @@ const App: React.FC = () => {
             const loadedData = JSON.parse(text);
 
             if (loadedData.drawingState && loadedData.drawingState.shapes && loadedData.drawingState.layers) {
-                const loadedDrawingState = loadedData.drawingState;
+                // Migracja starych plików - dodaj annotations jeśli brakuje
+                const loadedDrawingState = {
+                    ...loadedData.drawingState,
+                    annotations: loadedData.drawingState.annotations || []
+                };
                 setDrawingState(loadedDrawingState);
                 setHistory([loadedDrawingState]);
                 setHistoryIndex(0);

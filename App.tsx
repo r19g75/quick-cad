@@ -175,9 +175,11 @@ const App: React.FC = () => {
     setSelectedIds(new Set());
   }, [drawingState, selectedIds]);
 
-  const handleUpdateElement = useCallback((id: string, updates: Partial<Shape | Dimension>) => {
+  const handleUpdateElement = useCallback((id: string, updates: Partial<Shape | Dimension | Annotation>) => {
       const newState = produce(drawingState, draft => {
-          let item = draft.shapes.find(s => s.id === id) || draft.dimensions.find(d => d.id === id);
+          let item = draft.shapes.find(s => s.id === id) || 
+                     draft.dimensions.find(d => d.id === id) ||
+                     draft.annotations.find(a => a.id === id);
           if (item) {
               Object.assign(item, updates);
           }
@@ -431,8 +433,9 @@ const App: React.FC = () => {
     const layer = drawingState.layers.find(l => l.id === annotation.layerId);
     if (!layer || !layer.visible) return;
 
-    ctx.fillStyle = isSelected ? '#0ea5e9' : layer.color;
-    ctx.font = `${(annotation.fontSize || 14) / view.zoom}px Arial`;
+    const textColor = annotation.color || layer.color;
+    ctx.fillStyle = isSelected ? '#0ea5e9' : textColor;
+    ctx.font = `${(annotation.fontSize || 14) / view.zoom}px ${annotation.fontFamily || 'Arial'}`;
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(annotation.text, annotation.position.x, annotation.position.y);
@@ -710,11 +713,35 @@ const App: React.FC = () => {
         const selectedId = selectedIds.values().next().value;
         
         const nextState = produce(initialDragState.current, draft => {
-            let item = draft.shapes.find(s => s.id === selectedId) || draft.dimensions.find(d => d.id === selectedId);
+            // Sprawdź shapes
+            let item = draft.shapes.find(s => s.id === selectedId);
             if(item) {
                 if ('p1' in item) { item.p1.x += dx; item.p1.y += dy; }
                 if ('p2' in item) { item.p2.x += dx; item.p2.y += dy; }
                 if ('center' in item) { item.center.x += dx; item.center.y += dy; }
+                return;
+            }
+            // Sprawdź dimensions
+            let dim = draft.dimensions.find(d => d.id === selectedId);
+            if(dim) {
+                dim.p1.x += dx; dim.p1.y += dy;
+                dim.p2.x += dx; dim.p2.y += dy;
+                return;
+            }
+            // Sprawdź annotations
+            let annot = draft.annotations.find(a => a.id === selectedId);
+            if(annot) {
+                if (annot.type === 'text') {
+                    (annot as any).position.x += dx;
+                    (annot as any).position.y += dy;
+                } else if (annot.type === 'leader') {
+                    (annot as any).arrowPoint.x += dx;
+                    (annot as any).arrowPoint.y += dy;
+                    (annot as any).elbowPoint.x += dx;
+                    (annot as any).elbowPoint.y += dy;
+                    (annot as any).textPoint.x += dx;
+                    (annot as any).textPoint.y += dy;
+                }
             }
         });
         setDrawingState(nextState);
@@ -1221,7 +1248,7 @@ const App: React.FC = () => {
 interface PropertiesPanelProps {
   selectedIds: Set<string>;
   drawingState: DrawingState;
-  onUpdate: (id: string, updates: Partial<Shape | Dimension>) => void;
+  onUpdate: (id: string, updates: Partial<Shape | Dimension | Annotation>) => void;
   onAutoDimension: (id: string) => void;
 }
 
@@ -1239,18 +1266,24 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
     );
   }
   const selectedId = selectedIds.values().next().value;
-  const element = [...drawingState.shapes, ...drawingState.dimensions].find(e => e.id === selectedId);
+  
+  // Szukaj we wszystkich kolekcjach
+  const shapeElement = drawingState.shapes.find(s => s.id === selectedId);
+  const dimElement = drawingState.dimensions.find(d => d.id === selectedId);
+  const annotElement = drawingState.annotations?.find(a => a.id === selectedId);
+  
+  const element = shapeElement || dimElement || annotElement;
 
   if (!element) return null;
   
-  const handlePointChange = (pointName: 'p1' | 'p2' | 'center', coord: 'x' | 'y', value: number) => {
+  const handlePointChange = (pointName: 'p1' | 'p2' | 'center' | 'position', coord: 'x' | 'y', value: number) => {
     if (!isNaN(value)) {
       const originalPoint = (element as any)[pointName];
       onUpdate(element.id, { [pointName]: { ...originalPoint, [coord]: value } });
     }
   };
 
-  const handleValueChange = (propName: 'radius' | 'text' | 'offset', value: string | number) => {
+  const handleValueChange = (propName: string, value: string | number) => {
     onUpdate(element.id, { [propName]: value });
   };
   
@@ -1265,7 +1298,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
       }
   };
 
-  const renderPointInputs = (name: string, pointKey: 'p1' | 'p2' | 'center', point: Point) => (
+  const renderPointInputs = (name: string, pointKey: 'p1' | 'p2' | 'center' | 'position', point: Point) => (
     <>
       <div className="font-semibold text-xs text-gray-400 mt-2">{name}</div>
       <div className="grid grid-cols-2 gap-2">
@@ -1274,6 +1307,9 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
       </div>
     </>
   );
+
+  // Określ typ elementu
+  const elementType = 'type' in element ? element.type : ('offset' in element ? 'dimension' : 'unknown');
 
   return (
     <div>
@@ -1287,13 +1323,17 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm text-gray-300 capitalize">{'type' in element ? element.type : 'Dimension'}</p>
+        <p className="text-sm text-gray-300 capitalize">{elementType}</p>
+        
+        {/* Shape: Line */}
         {'type' in element && element.type === 'line' && (
             <>
                 {renderPointInputs('Start Point', 'p1', element.p1)}
                 {renderPointInputs('End Point', 'p2', element.p2)}
             </>
         )}
+        
+        {/* Shape: Rectangle */}
         {'type' in element && element.type === 'rectangle' && (
             <>
                 {renderPointInputs('Origin Corner (X0, Y0)', 'p1', element.p1)}
@@ -1312,6 +1352,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
                 </div>
             </>
         )}
+        
+        {/* Shape: Circle */}
         {'type' in element && element.type === 'circle' && (
             <>
                 {renderPointInputs('Center', 'center', element.center)}
@@ -1319,19 +1361,63 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
                 <NumberInput label="R" value={element.radius} onChange={val => handleValueChange('radius', val)} />
             </>
         )}
+        
+        {/* Dimension */}
         {'offset' in element && (
             <>
                 <div className="font-semibold text-xs text-gray-400 mt-2">Dimension Text</div>
                  <input
                     type="text"
-                    defaultValue={element.text || ''}
-                    placeholder={getDistance(element.p1, element.p2).toFixed(2)}
+                    defaultValue={(element as Dimension).text || ''}
+                    placeholder={getDistance((element as Dimension).p1, (element as Dimension).p2).toFixed(2)}
                     onBlur={(e) => handleValueChange('text', e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                     className="w-full bg-gray-700 p-1.5 text-sm rounded-md border border-gray-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
                  <div className="font-semibold text-xs text-gray-400 mt-2">Offset</div>
-                <NumberInput label="Offset" value={element.offset} onChange={val => handleValueChange('offset', val)} />
+                <NumberInput label="Offset" value={(element as Dimension).offset} onChange={val => handleValueChange('offset', val)} />
+            </>
+        )}
+        
+        {/* Annotation: Text */}
+        {'type' in element && element.type === 'text' && (
+            <>
+                {renderPointInputs('Position', 'position', (element as TextAnnotation).position)}
+                <div className="font-semibold text-xs text-gray-400 mt-2">Text</div>
+                <input
+                    type="text"
+                    defaultValue={(element as TextAnnotation).text}
+                    onBlur={(e) => handleValueChange('text', e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="w-full bg-gray-700 p-1.5 text-sm rounded-md border border-gray-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
+                <div className="font-semibold text-xs text-gray-400 mt-2">Font Size</div>
+                <NumberInput 
+                    label="Size" 
+                    value={(element as TextAnnotation).fontSize || 14} 
+                    onChange={val => handleValueChange('fontSize', val)} 
+                />
+                <div className="font-semibold text-xs text-gray-400 mt-2">Color</div>
+                <input
+                    type="color"
+                    value={(element as TextAnnotation).color || '#fbbf24'}
+                    onChange={(e) => handleValueChange('color', e.target.value)}
+                    className="w-full h-8 bg-gray-700 rounded-md border border-gray-600 cursor-pointer"
+                />
+            </>
+        )}
+        
+        {/* Annotation: Leader */}
+        {'type' in element && element.type === 'leader' && (
+            <>
+                <div className="font-semibold text-xs text-gray-400 mt-2">Text</div>
+                <input
+                    type="text"
+                    defaultValue={(element as LeaderAnnotation).text}
+                    onBlur={(e) => handleValueChange('text', e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                    className="w-full bg-gray-700 p-1.5 text-sm rounded-md border border-gray-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                />
             </>
         )}
       </div>

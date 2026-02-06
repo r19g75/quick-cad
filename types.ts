@@ -46,6 +46,8 @@ export interface TextAnnotation {
   position: Point;
   text: string;
   fontSize?: number;
+  color?: string;
+  fontFamily?: string;
 }
 
 export interface LeaderAnnotation {

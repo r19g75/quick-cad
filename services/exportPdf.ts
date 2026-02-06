@@ -1,6 +1,6 @@
 
 import { jsPDF } from 'jspdf';
-import { DrawingState, TitleBlockData, Shape, Dimension, Point } from '../types';
+import { DrawingState, TitleBlockData, Shape, Dimension, Point, Annotation, TextAnnotation, LeaderAnnotation } from '../types';
 import { getDistance } from './geometry';
 import { calculatePrintLayout } from './layout';
 
@@ -102,7 +102,7 @@ export const exportToPdf = (
     }
   });
   
-  // --- Draw Dimensions (Improved) ---
+  // --- Draw Dimensions ---
   const dimLayer = drawingState.layers.find(l => l.id === 'dimensions');
   if (dimLayer && dimLayer.visible) {
     const dimColor = dimLayer.color === '#ffffff' ? '#000000' : dimLayer.color;
@@ -162,6 +162,45 @@ export const exportToPdf = (
       if (textAngle < -90) textAngle += 180;
       
       doc.text(dimText, tMid.x, tMid.y - 1, { align: 'center', angle: textAngle });
+    });
+  }
+
+  // --- Draw Annotations ---
+  const annotLayer = drawingState.layers.find(l => l.id === 'annotations');
+  if (annotLayer && annotLayer.visible && drawingState.annotations) {
+    const annotColor = annotLayer.color === '#ffffff' ? '#000000' : annotLayer.color;
+    
+    drawingState.annotations.forEach(annotation => {
+      if (annotation.type === 'text') {
+        const textAnnot = annotation as TextAnnotation;
+        const tPos = transform(textAnnot.position);
+        const fontSize = (textAnnot.fontSize || 12) * finalScale;
+        doc.setFontSize(Math.max(6, Math.min(fontSize, 14))); // Clamp font size
+        doc.setTextColor(textAnnot.color || annotColor);
+        doc.text(textAnnot.text, tPos.x, tPos.y);
+      } else if (annotation.type === 'leader') {
+        const leader = annotation as LeaderAnnotation;
+        const tArrow = transform(leader.arrowPoint);
+        const tElbow = transform(leader.elbowPoint);
+        const tText = transform(leader.textPoint);
+        
+        doc.setDrawColor(annotColor);
+        doc.setLineWidth(0.15);
+        
+        // Draw lines
+        doc.line(tArrow.x, tArrow.y, tElbow.x, tElbow.y);
+        doc.line(tElbow.x, tElbow.y, tText.x, tText.y);
+        
+        // Draw arrow
+        doc.setFillColor(annotColor);
+        drawPdfArrow(doc, tArrow, tElbow, 1.5);
+        
+        // Draw text
+        doc.setFontSize(8);
+        doc.setTextColor(annotColor);
+        const textAlign = tText.x > tElbow.x ? 'left' : 'right';
+        doc.text(leader.text, tText.x + (textAlign === 'left' ? 1 : -1), tText.y - 0.5, { align: textAlign });
+      }
     });
   }
   

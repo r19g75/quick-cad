@@ -13,6 +13,9 @@ import {
   Circle,
   Rectangle,
   SnapPoint,
+  Annotation,
+  TextAnnotation,
+  LeaderAnnotation,
 } from './types';
 import { INITIAL_LAYERS, LAYER_COLORS, SNAP_DISTANCE, GRID_SIZE } from './constants';
 import {
@@ -44,18 +47,22 @@ import {
   UnlockedIcon,
   AutoDimensionIcon,
   AutoDimensionAllIcon,
-  PrintPreviewIcon
+  PrintPreviewIcon,
+  TextIcon,
+  LeaderIcon,
 } from './components/Icons';
 
 const App: React.FC = () => {
   const [drawingState, setDrawingState] = useState<DrawingState>({
     shapes: [],
     dimensions: [],
+    annotations: [],
     layers: INITIAL_LAYERS,
   });
   const [activeLayerId, setActiveLayerId] = useState<string>('contour');
   const [activeTool, setActiveTool] = useState<Tool>('select');
   const [tempShape, setTempShape] = useState<Shape | Dimension | null>(null);
+  const [tempAnnotation, setTempAnnotation] = useState<Annotation | null>(null);
   const [drawingPoints, setDrawingPoints] = useState<Point[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
@@ -65,6 +72,11 @@ const App: React.FC = () => {
   const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>('auto');
+  
+  // Dialog do wpisywania tekstu
+  const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [pendingAnnotation, setPendingAnnotation] = useState<Partial<Annotation> | null>(null);
+  const [textInputValue, setTextInputValue] = useState('');
 
   const [titleBlock, setTitleBlock] = useState<TitleBlockData>({
     detailName: 'Untitled Detail',
@@ -111,6 +123,18 @@ const App: React.FC = () => {
               message = 'Dimension: Click to place dimension line.';
             }
             break;
+          case 'text':
+            message = 'Text: Click to place text.';
+            break;
+          case 'leader':
+            if (drawingPoints.length === 0) {
+              message = 'Leader: Click on detail (arrow point).';
+            } else if (drawingPoints.length === 1) {
+              message = 'Leader: Click for elbow point.';
+            } else {
+              message = 'Leader: Click for text position.';
+            }
+            break;
           default:
             message = 'Ready';
         }
@@ -145,6 +169,7 @@ const App: React.FC = () => {
     const newState = produce(drawingState, draft => {
         draft.shapes = draft.shapes.filter(s => !selectedIds.has(s.id));
         draft.dimensions = draft.dimensions.filter(d => !selectedIds.has(d.id));
+        draft.annotations = draft.annotations.filter(a => !selectedIds.has(a.id));
     });
     updateStateAndHistory(newState);
     setSelectedIds(new Set());
@@ -402,6 +427,59 @@ const App: React.FC = () => {
     ctx.restore();
   };
 
+  const drawTextAnnotation = (ctx: CanvasRenderingContext2D, annotation: TextAnnotation, isSelected: boolean) => {
+    const layer = drawingState.layers.find(l => l.id === annotation.layerId);
+    if (!layer || !layer.visible) return;
+
+    ctx.fillStyle = isSelected ? '#0ea5e9' : layer.color;
+    ctx.font = `${(annotation.fontSize || 14) / view.zoom}px Arial`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(annotation.text, annotation.position.x, annotation.position.y);
+  };
+
+  const drawLeaderAnnotation = (ctx: CanvasRenderingContext2D, annotation: LeaderAnnotation, isSelected: boolean) => {
+    const layer = drawingState.layers.find(l => l.id === annotation.layerId);
+    if (!layer || !layer.visible) return;
+
+    ctx.strokeStyle = isSelected ? '#0ea5e9' : layer.color;
+    ctx.fillStyle = isSelected ? '#0ea5e9' : layer.color;
+    ctx.lineWidth = 1 / view.zoom;
+
+    const { arrowPoint, elbowPoint, textPoint } = annotation;
+
+    // Linia od strzałki do elbowa
+    ctx.beginPath();
+    ctx.moveTo(arrowPoint.x, arrowPoint.y);
+    ctx.lineTo(elbowPoint.x, elbowPoint.y);
+    ctx.stroke();
+
+    // Linia od elbowa do tekstu
+    ctx.beginPath();
+    ctx.moveTo(elbowPoint.x, elbowPoint.y);
+    ctx.lineTo(textPoint.x, textPoint.y);
+    ctx.stroke();
+
+    // Strzałka
+    const arrowSize = 8 / view.zoom;
+    drawArrow(ctx, arrowPoint, elbowPoint, arrowSize);
+
+    // Tekst
+    ctx.font = `${12 / view.zoom}px Arial`;
+    ctx.textAlign = textPoint.x > elbowPoint.x ? 'left' : 'right';
+    ctx.textBaseline = 'bottom';
+    const textX = textPoint.x + (textPoint.x > elbowPoint.x ? 3 : -3) / view.zoom;
+    ctx.fillText(annotation.text, textX, textPoint.y - 2 / view.zoom);
+  };
+
+  const drawAnnotation = (ctx: CanvasRenderingContext2D, annotation: Annotation, isSelected: boolean) => {
+    if (annotation.type === 'text') {
+      drawTextAnnotation(ctx, annotation, isSelected);
+    } else if (annotation.type === 'leader') {
+      drawLeaderAnnotation(ctx, annotation, isSelected);
+    }
+  };
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -451,6 +529,7 @@ const App: React.FC = () => {
 
       drawingState.shapes.forEach(s => drawShape(ctx, s, false));
       drawingState.dimensions.forEach(d => drawDimension(ctx, d, false));
+      drawingState.annotations.forEach(a => drawAnnotation(ctx, a, false));
       
       setView(v => ({...v, zoom: originalZoom}));
       ctx.restore();
@@ -463,10 +542,11 @@ const App: React.FC = () => {
 
       [...drawingState.shapes, ...(tempShape && 'type' in tempShape ? [tempShape] : [])].forEach(s => drawShape(ctx, s, selectedIds.has(s.id)));
       [...drawingState.dimensions, ...(tempShape && 'p1' in tempShape && 'p2' in tempShape && 'offset' in tempShape ? [tempShape] : [])].forEach(d => drawDimension(ctx, d, selectedIds.has(d.id)));
+      [...drawingState.annotations, ...(tempAnnotation ? [tempAnnotation] : [])].forEach(a => drawAnnotation(ctx, a, selectedIds.has(a.id)));
 
       ctx.restore();
     }
-  }, [drawingState, view, tempShape, selectedIds, isPreviewMode]);
+  }, [drawingState, view, tempShape, tempAnnotation, selectedIds, isPreviewMode]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isPreviewMode) return;
@@ -481,12 +561,13 @@ const App: React.FC = () => {
       let minDistance = 10 / view.zoom;
       let foundId: string | null = null;
       
-      const allItems = [...drawingState.shapes, ...drawingState.dimensions].reverse();
+      const allItems = [...drawingState.shapes, ...drawingState.dimensions, ...drawingState.annotations].reverse();
 
       for (const item of allItems) {
         let dist = Infinity;
 
-        if ('type' in item) { // It's a Shape
+        if ('type' in item && (item.type === 'line' || item.type === 'circle' || item.type === 'rectangle')) {
+            // It's a Shape
             switch(item.type) {
                 case 'line':
                     dist = pointToLineSegmentDistance(currentPoint, item.p1, item.p2);
@@ -515,6 +596,16 @@ const App: React.FC = () => {
             const dimP1 = { x: p1.x + dx, y: p1.y + dy };
             const dimP2 = { x: p2.x + dx, y: p2.y + dy };
             dist = pointToLineSegmentDistance(currentPoint, dimP1, dimP2);
+        } else if ('type' in item && item.type === 'text') {
+            // Text annotation - check distance to position
+            dist = getDistance(currentPoint, (item as TextAnnotation).position);
+        } else if ('type' in item && item.type === 'leader') {
+            // Leader annotation - check distance to lines
+            const leader = item as LeaderAnnotation;
+            dist = Math.min(
+                pointToLineSegmentDistance(currentPoint, leader.arrowPoint, leader.elbowPoint),
+                pointToLineSegmentDistance(currentPoint, leader.elbowPoint, leader.textPoint)
+            );
         }
 
         if (dist < minDistance) {
@@ -573,6 +664,29 @@ const App: React.FC = () => {
         updateStateAndHistory(produce(drawingState, draft => { draft.dimensions.push(newDim); }));
         setDrawingPoints([]);
         setTempShape(null);
+    } else if (activeTool === 'text') {
+        // Otwórz dialog do wpisania tekstu
+        setPendingAnnotation({
+            type: 'text',
+            position: finalPoint,
+            layerId: 'annotations',
+        });
+        setTextInputValue('');
+        setTextDialogOpen(true);
+        setDrawingPoints([]);
+    } else if (activeTool === 'leader' && newPoints.length === 3) {
+        // Otwórz dialog do wpisania tekstu dla leadera
+        setPendingAnnotation({
+            type: 'leader',
+            arrowPoint: newPoints[0],
+            elbowPoint: newPoints[1],
+            textPoint: newPoints[2],
+            layerId: 'annotations',
+        });
+        setTextInputValue('');
+        setTextDialogOpen(true);
+        setDrawingPoints([]);
+        setTempAnnotation(null);
     }
   };
 
@@ -626,9 +740,34 @@ const App: React.FC = () => {
         const pointVec = {x: finalPoint.x - p1_dim.x, y: finalPoint.y - p1_dim.y};
         const offset = (pointVec.x * lineVec.y - pointVec.y * lineVec.x) / getDistance(p1_dim, p2_dim);
         setTempShape({ id: 'temp', layerId: 'dimensions', p1: p1_dim, p2: p2_dim, offset });
+      } else if (activeTool === 'leader') {
+        if (drawingPoints.length === 1) {
+          // Podgląd: strzałka + linia do elbowa
+          setTempAnnotation({
+            id: 'temp',
+            type: 'leader',
+            layerId: 'annotations',
+            arrowPoint: drawingPoints[0],
+            elbowPoint: finalPoint,
+            textPoint: finalPoint,
+            text: '',
+          });
+        } else if (drawingPoints.length === 2) {
+          // Podgląd: strzałka + elbow + linia do tekstu
+          setTempAnnotation({
+            id: 'temp',
+            type: 'leader',
+            layerId: 'annotations',
+            arrowPoint: drawingPoints[0],
+            elbowPoint: drawingPoints[1],
+            textPoint: finalPoint,
+            text: '',
+          });
+        }
       }
     } else {
         setTempShape(null);
+        setTempAnnotation(null);
     }
   };
 
@@ -730,6 +869,64 @@ const App: React.FC = () => {
       } else {
           setStatusMessage('No new dimensions to add.');
       }
+  };
+
+  const handleClearDimensions = () => {
+      if (drawingState.dimensions.length === 0) {
+          setStatusMessage('No dimensions to clear.');
+          return;
+      }
+      const count = drawingState.dimensions.length;
+      const newState = produce(drawingState, draft => {
+          draft.dimensions = [];
+      });
+      updateStateAndHistory(newState);
+      setSelectedIds(new Set());
+      setStatusMessage(`Cleared ${count} dimensions.`);
+  };
+
+  const handleTextDialogSubmit = () => {
+    if (!pendingAnnotation || !textInputValue.trim()) {
+      setTextDialogOpen(false);
+      setPendingAnnotation(null);
+      return;
+    }
+
+    if (pendingAnnotation.type === 'text') {
+      const newAnnotation: TextAnnotation = {
+        id: Date.now().toString(),
+        type: 'text',
+        layerId: 'annotations',
+        position: (pendingAnnotation as any).position,
+        text: textInputValue.trim(),
+      };
+      updateStateAndHistory(produce(drawingState, draft => {
+        draft.annotations.push(newAnnotation);
+      }));
+    } else if (pendingAnnotation.type === 'leader') {
+      const newAnnotation: LeaderAnnotation = {
+        id: Date.now().toString(),
+        type: 'leader',
+        layerId: 'annotations',
+        arrowPoint: (pendingAnnotation as any).arrowPoint,
+        elbowPoint: (pendingAnnotation as any).elbowPoint,
+        textPoint: (pendingAnnotation as any).textPoint,
+        text: textInputValue.trim(),
+      };
+      updateStateAndHistory(produce(drawingState, draft => {
+        draft.annotations.push(newAnnotation);
+      }));
+    }
+
+    setTextDialogOpen(false);
+    setPendingAnnotation(null);
+    setTextInputValue('');
+  };
+
+  const handleTextDialogCancel = () => {
+    setTextDialogOpen(false);
+    setPendingAnnotation(null);
+    setTextInputValue('');
   };
 
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
@@ -836,6 +1033,8 @@ const App: React.FC = () => {
             <ToolButton tool="circle" label="Circle"><CircleIcon /></ToolButton>
             <ToolButton tool="rectangle" label="Rectangle"><RectangleIcon /></ToolButton>
             <ToolButton tool="dimension" label="Dimension"><DimensionIcon /></ToolButton>
+            <ToolButton tool="text" label="Text"><TextIcon /></ToolButton>
+            <ToolButton tool="leader" label="Leader"><LeaderIcon /></ToolButton>
         </div>
         <div className="flex-grow"></div>
         <div className="flex flex-col space-y-2">
@@ -880,9 +1079,12 @@ const App: React.FC = () => {
                   <option value="shapes-only">Shapes Only</option>
                   <option value="full">Full</option>
                 </select>
-                <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 rounded-r-md text-sm font-semibold flex items-center space-x-1" title="Automatically dimension all features">
+                <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-sm font-semibold flex items-center space-x-1" title="Automatically dimension all features">
                   <AutoDimensionAllIcon />
                   <span>Dimension</span>
+                </button>
+                <button onClick={handleClearDimensions} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Clear all dimensions">
+                  Clear
                 </button>
               </div>
               <button
@@ -966,6 +1168,43 @@ const App: React.FC = () => {
       </aside>
       
       {isExportPanelOpen && <ExportPanel drawingState={drawingState} onClose={() => setIsExportPanelOpen(false)} titleBlock={titleBlock} onTitleBlockChange={setTitleBlock} />}
+      
+      {/* Text Input Dialog */}
+      {textDialogOpen && (
+        <div className="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-gray-100">
+            <h2 className="text-lg font-bold mb-4">
+              {pendingAnnotation?.type === 'leader' ? 'Enter Leader Text' : 'Enter Text'}
+            </h2>
+            <input
+              type="text"
+              value={textInputValue}
+              onChange={(e) => setTextInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleTextDialogSubmit();
+                if (e.key === 'Escape') handleTextDialogCancel();
+              }}
+              placeholder="Enter text..."
+              className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end space-x-2">
+              <button
+                onClick={handleTextDialogCancel}
+                className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTextDialogSubmit}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 rounded-md font-semibold"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

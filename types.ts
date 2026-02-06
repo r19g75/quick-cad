@@ -10,7 +10,7 @@ export type SnapPoint = {
   type: SnapType;
 };
 
-export type Tool = 'select' | 'pan' | 'line' | 'circle' | 'rectangle' | 'dimension';
+export type Tool = 'select' | 'pan' | 'line' | 'circle' | 'rectangle' | 'dimension' | 'text' | 'leader';
 
 // --- Shapes ---
 interface BaseShape {
@@ -38,6 +38,28 @@ export interface Rectangle extends BaseShape {
 
 export type Shape = Line | Circle | Rectangle;
 
+// --- Annotations ---
+export interface TextAnnotation {
+  id: string;
+  layerId: string;
+  type: 'text';
+  position: Point;
+  text: string;
+  fontSize?: number;
+}
+
+export interface LeaderAnnotation {
+  id: string;
+  layerId: string;
+  type: 'leader';
+  arrowPoint: Point;    // Punkt strzałki (na detalu)
+  elbowPoint: Point;    // Punkt załamania
+  textPoint: Point;     // Koniec linii poziomej (gdzie tekst)
+  text: string;
+}
+
+export type Annotation = TextAnnotation | LeaderAnnotation;
+
 // --- Dimensions ---
 export interface Dimension {
     id: string;
@@ -61,6 +83,7 @@ export interface Layer {
 export interface DrawingState {
   shapes: Shape[];
   dimensions: Dimension[];
+  annotations: Annotation[];
   layers: Layer[];
 }
 

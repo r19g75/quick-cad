@@ -1,20 +1,26 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Quick-CAD 2D
 
-# Run and deploy your AI Studio app
+A lightweight, browser-based 2D CAD application for rapid technical drawings of mechanical parts.
 
-This contains everything you need to run your app locally.
+## Features
 
-View your app in AI Studio: https://ai.studio/apps/drive/1QXzYwJpDNLUFec82YZ3bjWkjcb3aVFit
+- Drawing tools: Line, Circle, Rectangle
+- Dimensioning with auto-dimension
+- Annotations: Text, Leader
+- **Projection views**: Side, Top, All (orthographic projections)
+- Layers management
+- Export to PDF and DXF
+- Offline support via Service Worker
+- Save/Load .qcad files
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js
 
+1. Install dependencies: `npm install`
+2. Run the app: `npm run dev`
+3. Open http://localhost:3000/quick-cad/
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## Live Demo
+
+https://r19g75.github.io/quick-cad/

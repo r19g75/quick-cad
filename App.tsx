@@ -16,6 +16,7 @@ import {
   Annotation,
   TextAnnotation,
   LeaderAnnotation,
+  ProjectionType,
 } from './types';
 import { INITIAL_LAYERS, LAYER_COLORS, SNAP_DISTANCE, GRID_SIZE } from './constants';
 import {
@@ -27,6 +28,7 @@ import { exportToPdf, A4_WIDTH, A4_HEIGHT, MARGIN } from './services/exportPdf';
 import { exportToDxf } from './services/exportDxf';
 import { calculatePrintLayout } from './services/layout';
 import { autoDimensionCircle, autoDimensionRectangle, autoDimensionAll, DimensionStyle } from './services/autoDimension';
+import { generateSideView, generateTopView, generateAllProjections } from './services/projection';
 import {
   SelectIcon,
   LineIcon,
@@ -77,6 +79,10 @@ const App: React.FC = () => {
   const [textDialogOpen, setTextDialogOpen] = useState(false);
   const [pendingAnnotation, setPendingAnnotation] = useState<Partial<Annotation> | null>(null);
   const [textInputValue, setTextInputValue] = useState('');
+  
+  // Projekcje (rzuty)
+  const [projectionDepth, setProjectionDepth] = useState<number>(10);
+  const [projectionType, setProjectionType] = useState<ProjectionType>('all');
 
   const [titleBlock, setTitleBlock] = useState<TitleBlockData>({
     detailName: 'Untitled Detail',
@@ -912,6 +918,58 @@ const App: React.FC = () => {
       setStatusMessage(`Cleared ${count} dimensions.`);
   };
 
+  const handleGenerateProjection = () => {
+    // Filtruj tylko kształty z warstwy contour (główny widok)
+    const mainShapes = drawingState.shapes.filter(s => s.layerId === 'contour');
+    
+    if (mainShapes.length === 0) {
+      setStatusMessage('No shapes on Contour layer to project.');
+      return;
+    }
+    
+    if (projectionDepth <= 0) {
+      setStatusMessage('Depth must be greater than 0.');
+      return;
+    }
+    
+    let newShapes: Shape[] = [];
+    
+    if (projectionType === 'side') {
+      const result = generateSideView(mainShapes, projectionDepth, 'contour');
+      newShapes = result.shapes;
+      setStatusMessage(`Generated Side View with ${newShapes.length} shapes.`);
+    } else if (projectionType === 'top') {
+      const result = generateTopView(mainShapes, projectionDepth, 'contour');
+      newShapes = result.shapes;
+      setStatusMessage(`Generated Top View with ${newShapes.length} shapes.`);
+    } else {
+      const results = generateAllProjections(mainShapes, projectionDepth, 'contour');
+      newShapes = [...results.sideView.shapes, ...results.topView.shapes];
+      setStatusMessage(`Generated Side and Top Views with ${newShapes.length} shapes.`);
+    }
+    
+    if (newShapes.length > 0) {
+      const newState = produce(drawingState, draft => {
+        draft.shapes.push(...newShapes);
+      });
+      updateStateAndHistory(newState);
+    }
+  };
+
+  const handleClearProjections = () => {
+    // Usuń kształty zaczynające się od 'proj-'
+    const projShapes = drawingState.shapes.filter(s => s.id.startsWith('proj-'));
+    if (projShapes.length === 0) {
+      setStatusMessage('No projections to clear.');
+      return;
+    }
+    const newState = produce(drawingState, draft => {
+      draft.shapes = draft.shapes.filter(s => !s.id.startsWith('proj-'));
+    });
+    updateStateAndHistory(newState);
+    setStatusMessage(`Cleared ${projShapes.length} projection shapes.`);
+  };
+
   const handleTextDialogSubmit = () => {
     if (!pendingAnnotation || !textInputValue.trim()) {
       setTextDialogOpen(false);
@@ -1121,6 +1179,34 @@ const App: React.FC = () => {
                 </button>
                 <button onClick={handleClearDimensions} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Clear all dimensions">
                   Clear
+                </button>
+              </div>
+              {/* Projection controls */}
+              <div className="flex items-center space-x-1">
+                <input
+                  type="number"
+                  value={projectionDepth}
+                  onChange={(e) => setProjectionDepth(Math.max(1, parseFloat(e.target.value) || 1))}
+                  className="w-16 px-2 py-1 bg-gray-700 text-sm rounded-l-md border-r border-gray-600 focus:outline-none"
+                  title="Depth/Thickness (mm)"
+                  min="1"
+                  step="1"
+                />
+                <select
+                  value={projectionType}
+                  onChange={(e) => setProjectionType(e.target.value as ProjectionType)}
+                  className="px-2 py-1 bg-gray-700 text-sm border-r border-gray-600 focus:outline-none"
+                  title="Projection type"
+                >
+                  <option value="side">Side</option>
+                  <option value="top">Top</option>
+                  <option value="all">All</option>
+                </select>
+                <button onClick={handleGenerateProjection} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-sm font-semibold" title="Generate projection views">
+                  Project
+                </button>
+                <button onClick={handleClearProjections} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Clear projections">
+                  ×
                 </button>
               </div>
               <button

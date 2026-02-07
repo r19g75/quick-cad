@@ -87,7 +87,16 @@ export interface DrawingState {
   dimensions: Dimension[];
   annotations: Annotation[];
   layers: Layer[];
+  projectionSettings?: ProjectionSettings;
 }
+
+export interface ProjectionSettings {
+  depth: number;  // Głębokość/grubość w mm
+  sideViewOffset?: Point;  // Opcjonalne przesunięcie widoku z boku
+  topViewOffset?: Point;   // Opcjonalne przesunięcie widoku z góry
+}
+
+export type ProjectionType = 'side' | 'top' | 'all';
 
 export interface TitleBlockData {
     detailName: string;

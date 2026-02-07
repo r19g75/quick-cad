@@ -36,6 +36,79 @@ const getGlobalBoundingBox = (shapes: Shape[]): { minX: number, minY: number, ma
 };
 
 /**
+ * Generuje linie symetrii (osie) przez środek układu współrzędnych
+ * Linie są na warstwie 'axes' i będą rysowane jako kreska-kropka-kreska
+ */
+const generateCenterlines = (
+  globalBbox: { minX: number, minY: number, maxX: number, maxY: number },
+  depth: number,
+  offsetX: number,
+  offsetY: number,
+  viewType: 'main' | 'side' | 'top'
+): Shape[] => {
+  const lines: Shape[] = [];
+  const extend = 10; // Przedłużenie osi poza rysunek
+  
+  const centerX = (globalBbox.minX + globalBbox.maxX) / 2;
+  const centerY = (globalBbox.minY + globalBbox.maxY) / 2;
+  
+  if (viewType === 'main') {
+    // Oś pozioma przez środek głównego widoku
+    lines.push({
+      id: `proj-axis-main-h-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: globalBbox.minX - extend, y: centerY },
+      p2: { x: globalBbox.maxX + extend, y: centerY }
+    });
+    // Oś pionowa przez środek głównego widoku
+    lines.push({
+      id: `proj-axis-main-v-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: centerX, y: globalBbox.minY - extend },
+      p2: { x: centerX, y: globalBbox.maxY + extend }
+    });
+  } else if (viewType === 'side') {
+    // Oś pozioma w widoku z boku (kontynuacja osi głównego widoku)
+    lines.push({
+      id: `proj-axis-side-h-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: offsetX - extend, y: centerY },
+      p2: { x: offsetX + depth + extend, y: centerY }
+    });
+    // Oś pionowa w widoku z boku (środek głębokości)
+    lines.push({
+      id: `proj-axis-side-v-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: offsetX + depth / 2, y: globalBbox.minY - extend },
+      p2: { x: offsetX + depth / 2, y: globalBbox.maxY + extend }
+    });
+  } else if (viewType === 'top') {
+    // Oś pionowa w widoku z góry (kontynuacja osi głównego widoku)
+    lines.push({
+      id: `proj-axis-top-v-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: centerX, y: offsetY - extend },
+      p2: { x: centerX, y: offsetY + depth + extend }
+    });
+    // Oś pozioma w widoku z góry (środek głębokości)
+    lines.push({
+      id: `proj-axis-top-h-${Date.now()}`,
+      type: 'line',
+      layerId: 'axes',
+      p1: { x: globalBbox.minX - extend, y: offsetY + depth / 2 },
+      p2: { x: globalBbox.maxX + extend, y: offsetY + depth / 2 }
+    });
+  }
+  
+  return lines;
+};
+
+/**
  * Generuje widok z boku (Side View)
  * - Okrąg → prostokąt (średnica × głębokość)
  * - Prostokąt → prostokąt (wysokość × głębokość)
@@ -50,6 +123,10 @@ export const generateSideView = (
   const globalBbox = getGlobalBoundingBox(shapes);
   const offsetX = globalBbox.maxX + PROJECTION_GAP;
   const projectedShapes: Shape[] = [];
+  
+  // Dodaj linie symetrii dla głównego widoku i widoku z boku
+  projectedShapes.push(...generateCenterlines(globalBbox, depth, offsetX, 0, 'main'));
+  projectedShapes.push(...generateCenterlines(globalBbox, depth, offsetX, 0, 'side'));
   
   shapes.forEach((shape, index) => {
     const id = `proj-side-${Date.now()}-${index}`;
@@ -67,7 +144,7 @@ export const generateSideView = (
         p2: { x: offsetX + depth, y: topY + diameter }
       });
       
-      // Dodaj linię środkową (oś)
+      // Dodaj linię środkową otworu
       projectedShapes.push({
         id: `${id}-axis`,
         type: 'line',
@@ -118,7 +195,7 @@ export const generateSideView = (
   return {
     shapes: projectedShapes,
     viewOffset: { x: offsetX, y: globalBbox.minY },
-    viewLabel: 'Side View'
+    viewLabel: 'Widok z boku'
   };
 };
 
@@ -138,6 +215,10 @@ export const generateTopView = (
   const offsetY = globalBbox.maxY + PROJECTION_GAP;
   const projectedShapes: Shape[] = [];
   
+  // Dodaj linie symetrii dla głównego widoku i widoku z góry
+  projectedShapes.push(...generateCenterlines(globalBbox, depth, 0, offsetY, 'main'));
+  projectedShapes.push(...generateCenterlines(globalBbox, depth, 0, offsetY, 'top'));
+  
   shapes.forEach((shape, index) => {
     const id = `proj-top-${Date.now()}-${index}`;
     
@@ -154,7 +235,7 @@ export const generateTopView = (
         p2: { x: leftX + diameter, y: offsetY + depth }
       });
       
-      // Dodaj linię środkową (oś)
+      // Dodaj linię środkową otworu
       projectedShapes.push({
         id: `${id}-axis`,
         type: 'line',
@@ -205,7 +286,7 @@ export const generateTopView = (
   return {
     shapes: projectedShapes,
     viewOffset: { x: globalBbox.minX, y: offsetY },
-    viewLabel: 'Top View'
+    viewLabel: 'Widok z góry'
   };
 };
 
@@ -217,8 +298,22 @@ export const generateAllProjections = (
   depth: number,
   layerId: string = 'contour'
 ): { sideView: ProjectionResult, topView: ProjectionResult } => {
+  const globalBbox = getGlobalBoundingBox(shapes);
+  const offsetX = globalBbox.maxX + PROJECTION_GAP;
+  const offsetY = globalBbox.maxY + PROJECTION_GAP;
+  
+  // Dla "all" generujemy osie tylko raz dla głównego widoku
+  const mainAxes = generateCenterlines(globalBbox, depth, offsetX, offsetY, 'main');
+  
+  const sideResult = generateSideView(shapes, depth, layerId);
+  const topResult = generateTopView(shapes, depth, layerId);
+  
+  // Filtruj duplikaty osi głównego widoku
+  const sideShapesFiltered = sideResult.shapes.filter(s => !s.id.includes('axis-main'));
+  const topShapesFiltered = topResult.shapes.filter(s => !s.id.includes('axis-main'));
+  
   return {
-    sideView: generateSideView(shapes, depth, layerId),
-    topView: generateTopView(shapes, depth, layerId)
+    sideView: { ...sideResult, shapes: [...mainAxes, ...sideShapesFiltered] },
+    topView: { ...topResult, shapes: topShapesFiltered }
   };
 };

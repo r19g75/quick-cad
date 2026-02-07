@@ -1,26 +1,26 @@
 # Quick-CAD 2D
 
-A lightweight, browser-based 2D CAD application for rapid technical drawings of mechanical parts.
+Lekka, przeglądarkowa aplikacja CAD 2D do szybkich rysunków technicznych części mechanicznych.
 
-## Features
+## Funkcje
 
-- Drawing tools: Line, Circle, Rectangle
-- Dimensioning with auto-dimension
-- Annotations: Text, Leader
-- **Projection views**: Side, Top, All (orthographic projections)
-- Layers management
-- Export to PDF and DXF
-- Offline support via Service Worker
-- Save/Load .qcad files
+- Narzędzia rysowania: Linia, Okrąg, Prostokąt
+- Wymiarowanie z auto-wymiarowaniem
+- Adnotacje: Tekst, Odnośnik
+- **Rzutowanie**: widok z boku, z góry, wszystkie (z liniami symetrii wg norm)
+- Zarządzanie warstwami
+- Eksport do PDF i DXF
+- Tryb offline (Service Worker)
+- Zapis/Odczyt plików .qcad
 
-## Run Locally
+## Uruchomienie lokalne
 
-**Prerequisites:** Node.js
+**Wymagania:** Node.js
 
-1. Install dependencies: `npm install`
-2. Run the app: `npm run dev`
-3. Open http://localhost:3000/quick-cad/
+1. Zainstaluj zależności: `npm install`
+2. Uruchom: `npm run dev`
+3. Otwórz http://localhost:3000/quick-cad/
 
-## Live Demo
+## Demo
 
 https://r19g75.github.io/quick-cad/

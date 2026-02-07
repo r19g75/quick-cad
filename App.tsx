@@ -70,7 +70,7 @@ const App: React.FC = () => {
   const [view, setView] = useState({ x: 0, y: 0, zoom: 1 });
   const [history, setHistory] = useState<DrawingState[]>([drawingState]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [statusMessage, setStatusMessage] = useState<string>('Ready');
+  const [statusMessage, setStatusMessage] = useState<string>('Gotowy');
   const [snapIndicator, setSnapIndicator] = useState<SnapPoint | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [dimensionStyle, setDimensionStyle] = useState<DimensionStyle>('auto');
@@ -105,44 +105,44 @@ const App: React.FC = () => {
   const supportsFileSystemAccess = useMemo(() => typeof window.showSaveFilePicker === 'function', []);
 
   useEffect(() => {
-    let message = isPreviewMode ? `Print Preview Mode (A4 Landscape). Press Esc or click Preview button to exit.` : '';
+    let message = isPreviewMode ? `Podgląd wydruku (A4 poziomo). Naciśnij Esc lub kliknij Podgląd aby wyjść.` : '';
     if (!isPreviewMode) {
         switch (activeTool) {
           case 'select':
-            message = 'Click object to select. Use arrow keys to nudge selected dimension.';
+            message = 'Kliknij obiekt aby zaznaczyć. Strzałki przesuwają zaznaczony wymiar.';
             break;
           case 'line':
-            message = drawingPoints.length === 0 ? 'Line: Click to set start point.' : 'Line: Click to set end point.';
+            message = drawingPoints.length === 0 ? 'Linia: Kliknij punkt początkowy.' : 'Linia: Kliknij punkt końcowy.';
             break;
           case 'circle':
-            message = drawingPoints.length === 0 ? 'Circle: Click to set center point.' : 'Circle: Click to set radius.';
+            message = drawingPoints.length === 0 ? 'Okrąg: Kliknij środek.' : 'Okrąg: Kliknij aby ustalić promień.';
             break;
           case 'rectangle':
-            message = drawingPoints.length === 0 ? 'Rectangle: Click to set first corner.' : 'Rectangle: Click to set opposite corner.';
+            message = drawingPoints.length === 0 ? 'Prostokąt: Kliknij pierwszy narożnik.' : 'Prostokąt: Kliknij przeciwległy narożnik.';
             break;
           case 'dimension':
             if (drawingPoints.length === 0) {
-              message = 'Dimension: Click first point.';
+              message = 'Wymiar: Kliknij pierwszy punkt.';
             } else if (drawingPoints.length === 1) {
-              message = 'Dimension: Click second point.';
+              message = 'Wymiar: Kliknij drugi punkt.';
             } else {
-              message = 'Dimension: Click to place dimension line.';
+              message = 'Wymiar: Kliknij aby umieścić linię wymiarową.';
             }
             break;
           case 'text':
-            message = 'Text: Click to place text.';
+            message = 'Tekst: Kliknij aby umieścić tekst.';
             break;
           case 'leader':
             if (drawingPoints.length === 0) {
-              message = 'Leader: Click on detail (arrow point).';
+              message = 'Odnośnik: Kliknij na detal (grot strzałki).';
             } else if (drawingPoints.length === 1) {
-              message = 'Leader: Click for elbow point.';
+              message = 'Odnośnik: Kliknij punkt załamania.';
             } else {
-              message = 'Leader: Click for text position.';
+              message = 'Odnośnik: Kliknij miejsce tekstu.';
             }
             break;
           default:
-            message = 'Ready';
+            message = 'Gotowy';
         }
     }
     setStatusMessage(message);
@@ -215,11 +215,11 @@ const App: React.FC = () => {
           await writable.close();
 
           fileHandleRef.current = handle;
-          setStatusMessage(`File saved as: ${handle.name}`);
+          setStatusMessage(`Zapisano jako: ${handle.name}`);
       } catch (err) {
           if ((err as DOMException).name !== 'AbortError') {
               console.error('Error saving file:', err);
-              setStatusMessage('Error: Unable to save file.');
+              setStatusMessage('Błąd: Nie można zapisać pliku.');
           }
       }
     } else {
@@ -235,7 +235,7 @@ const App: React.FC = () => {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatusMessage('File saved.');
+      setStatusMessage('Plik zapisany.');
     }
   }, [supportsFileSystemAccess, titleBlock, drawingState]);
   
@@ -246,7 +246,7 @@ const App: React.FC = () => {
             const dataToSave = { drawingState, titleBlock };
             await writable.write(JSON.stringify(dataToSave, null, 2));
             await writable.close();
-            setStatusMessage(`File saved: ${fileHandleRef.current.name}`);
+            setStatusMessage(`Zapisano: ${fileHandleRef.current.name}`);
             return;
         } catch (err) {
             console.error('Error saving file:', err);
@@ -349,6 +349,17 @@ const App: React.FC = () => {
 
     ctx.strokeStyle = isSelected ? '#0ea5e9' : layer.color;
     ctx.lineWidth = (isSelected ? 2 : 1) / view.zoom;
+    
+    // Linie osiowe (axes) rysujemy jako kreska-kropka-kreska wg norm
+    if (shape.layerId === 'axes') {
+      const dashLength = 10 / view.zoom;
+      const dotLength = 2 / view.zoom;
+      const gapLength = 4 / view.zoom;
+      ctx.setLineDash([dashLength, gapLength, dotLength, gapLength]);
+    } else {
+      ctx.setLineDash([]);
+    }
+    
     ctx.beginPath();
 
     switch (shape.type) {
@@ -364,6 +375,7 @@ const App: React.FC = () => {
         break;
     }
     ctx.stroke();
+    ctx.setLineDash([]); // Reset
   };
   
   const drawDimension = (ctx: CanvasRenderingContext2D, dim: Dimension, isSelected: boolean) => {
@@ -898,15 +910,15 @@ const App: React.FC = () => {
             draft.dimensions.push(...newDimensions);
           });
           updateStateAndHistory(newState);
-          setStatusMessage(`Added ${newDimensions.length} dimensions.`);
+          setStatusMessage(`Dodano ${newDimensions.length} wymiarów.`);
       } else {
-          setStatusMessage('No new dimensions to add.');
+          setStatusMessage('Brak nowych wymiarów do dodania.');
       }
   };
 
   const handleClearDimensions = () => {
       if (drawingState.dimensions.length === 0) {
-          setStatusMessage('No dimensions to clear.');
+          setStatusMessage('Brak wymiarów do usunięcia.');
           return;
       }
       const count = drawingState.dimensions.length;
@@ -915,7 +927,7 @@ const App: React.FC = () => {
       });
       updateStateAndHistory(newState);
       setSelectedIds(new Set());
-      setStatusMessage(`Cleared ${count} dimensions.`);
+      setStatusMessage(`Usunięto ${count} wymiarów.`);
   };
 
   const handleGenerateProjection = () => {
@@ -923,12 +935,12 @@ const App: React.FC = () => {
     const mainShapes = drawingState.shapes.filter(s => s.layerId === 'contour');
     
     if (mainShapes.length === 0) {
-      setStatusMessage('No shapes on Contour layer to project.');
+      setStatusMessage('Brak kształtów na warstwie Kontur do rzutowania.');
       return;
     }
     
     if (projectionDepth <= 0) {
-      setStatusMessage('Depth must be greater than 0.');
+      setStatusMessage('Głębokość musi być większa od 0.');
       return;
     }
     
@@ -937,15 +949,15 @@ const App: React.FC = () => {
     if (projectionType === 'side') {
       const result = generateSideView(mainShapes, projectionDepth, 'contour');
       newShapes = result.shapes;
-      setStatusMessage(`Generated Side View with ${newShapes.length} shapes.`);
+      setStatusMessage(`Wygenerowano widok z boku: ${newShapes.length} kształtów.`);
     } else if (projectionType === 'top') {
       const result = generateTopView(mainShapes, projectionDepth, 'contour');
       newShapes = result.shapes;
-      setStatusMessage(`Generated Top View with ${newShapes.length} shapes.`);
+      setStatusMessage(`Wygenerowano widok z góry: ${newShapes.length} kształtów.`);
     } else {
       const results = generateAllProjections(mainShapes, projectionDepth, 'contour');
       newShapes = [...results.sideView.shapes, ...results.topView.shapes];
-      setStatusMessage(`Generated Side and Top Views with ${newShapes.length} shapes.`);
+      setStatusMessage(`Wygenerowano widoki z boku i z góry: ${newShapes.length} kształtów.`);
     }
     
     if (newShapes.length > 0) {
@@ -960,14 +972,14 @@ const App: React.FC = () => {
     // Usuń kształty zaczynające się od 'proj-'
     const projShapes = drawingState.shapes.filter(s => s.id.startsWith('proj-'));
     if (projShapes.length === 0) {
-      setStatusMessage('No projections to clear.');
+      setStatusMessage('Brak rzutów do usunięcia.');
       return;
     }
     const newState = produce(drawingState, draft => {
       draft.shapes = draft.shapes.filter(s => !s.id.startsWith('proj-'));
     });
     updateStateAndHistory(newState);
-    setStatusMessage(`Cleared ${projShapes.length} projection shapes.`);
+    setStatusMessage(`Usunięto ${projShapes.length} kształtów rzutowania.`);
   };
 
   const handleTextDialogSubmit = () => {
@@ -1045,14 +1057,14 @@ const App: React.FC = () => {
             setDrawingPoints([]);
             setTempShape(null);
             fileHandleRef.current = handle;
-            setStatusMessage(`Loaded file: ${file.name}`);
+            setStatusMessage(`Wczytano: ${file.name}`);
         } else {
             throw new Error("Invalid file format");
         }
     } catch (err) {
         if ((err as DOMException).name !== 'AbortError') {
             console.error('Error opening file:', err);
-            setStatusMessage('Error: Could not load file.');
+            setStatusMessage('Błąd: Nie można wczytać pliku.');
         }
     }
     } else {
@@ -1088,13 +1100,13 @@ const App: React.FC = () => {
                 setDrawingPoints([]);
                 setTempShape(null);
                 fileHandleRef.current = null; // Can't get a handle in fallback mode
-                setStatusMessage(`Loaded file: ${file.name}`);
+                setStatusMessage(`Wczytano: ${file.name}`);
             } else {
                 throw new Error("Invalid file format");
             }
         } catch (error) {
             console.error("Failed to load or parse file:", error);
-            setStatusMessage("Error: Could not load file. Invalid format.");
+            setStatusMessage("Błąd: Nie można wczytać pliku. Nieprawidłowy format.");
         }
     };
     reader.onerror = () => {
@@ -1149,17 +1161,17 @@ const App: React.FC = () => {
         <header className="h-10 bg-gray-700 flex items-center px-4 justify-between">
             <div className="text-sm">Quick-CAD 2D</div>
             <div className="flex items-center space-x-2">
-              <button onClick={handleSave} className="px-3 py-1 bg-sky-600 hover:bg-sky-700 rounded-md text-sm font-semibold flex items-center space-x-1" title={supportsFileSystemAccess ? 'Save (Ctrl+S)' : 'Save a Copy (Ctrl+S)'}>
+              <button onClick={handleSave} className="px-3 py-1 bg-sky-600 hover:bg-sky-700 rounded-md text-sm font-semibold flex items-center space-x-1" title={supportsFileSystemAccess ? 'Zapisz (Ctrl+S)' : 'Zapisz kopię (Ctrl+S)'}>
                 <SaveIcon />
-                <span>Save</span>
+                <span>Zapisz</span>
               </button>
-              <button onClick={handleSaveAs} className="px-3 py-1 bg-sky-600 hover:bg-sky-700 rounded-md text-sm font-semibold flex items-center space-x-1" title="Save As...">
+              <button onClick={handleSaveAs} className="px-3 py-1 bg-sky-600 hover:bg-sky-700 rounded-md text-sm font-semibold flex items-center space-x-1" title="Zapisz jako...">
                 <SaveAsIcon />
-                <span>Save As</span>
+                <span>Zapisz jako</span>
               </button>
               <button onClick={handleLoadClick} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded-md text-sm font-semibold flex items-center space-x-1">
                 <LoadIcon />
-                <span>Load</span>
+                <span>Wczytaj</span>
               </button>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".qcad,application/json" style={{ display: 'none' }} />
               <div className="flex items-center space-x-1">
@@ -1167,28 +1179,28 @@ const App: React.FC = () => {
                   value={dimensionStyle} 
                   onChange={(e) => setDimensionStyle(e.target.value as DimensionStyle)}
                   className="px-2 py-1 bg-gray-700 text-sm rounded-l-md border-r border-gray-600 focus:outline-none"
-                  title="Dimension style"
+                  title="Styl wymiarowania"
                 >
                   <option value="auto">Auto</option>
-                  <option value="shapes-only">Shapes Only</option>
-                  <option value="full">Full</option>
+                  <option value="shapes-only">Tylko kształty</option>
+                  <option value="full">Pełne</option>
                 </select>
-                <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-sm font-semibold flex items-center space-x-1" title="Automatically dimension all features">
+                <button onClick={handleAutoDimensionAll} className="px-3 py-1 bg-teal-600 hover:bg-teal-700 text-sm font-semibold flex items-center space-x-1" title="Automatyczne wymiarowanie">
                   <AutoDimensionAllIcon />
-                  <span>Dimension</span>
+                  <span>Wymiaruj</span>
                 </button>
-                <button onClick={handleClearDimensions} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Clear all dimensions">
-                  Clear
+                <button onClick={handleClearDimensions} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Usuń wszystkie wymiary">
+                  Usuń
                 </button>
               </div>
-              {/* Projection controls */}
+              {/* Kontrolki rzutowania */}
               <div className="flex items-center space-x-1">
                 <input
                   type="number"
                   value={projectionDepth}
                   onChange={(e) => setProjectionDepth(Math.max(1, parseFloat(e.target.value) || 1))}
                   className="w-16 px-2 py-1 bg-gray-700 text-sm rounded-l-md border-r border-gray-600 focus:outline-none"
-                  title="Depth/Thickness (mm)"
+                  title="Głębokość/Grubość (mm)"
                   min="1"
                   step="1"
                 />
@@ -1196,29 +1208,29 @@ const App: React.FC = () => {
                   value={projectionType}
                   onChange={(e) => setProjectionType(e.target.value as ProjectionType)}
                   className="px-2 py-1 bg-gray-700 text-sm border-r border-gray-600 focus:outline-none"
-                  title="Projection type"
+                  title="Typ rzutu"
                 >
-                  <option value="side">Side</option>
-                  <option value="top">Top</option>
-                  <option value="all">All</option>
+                  <option value="side">Z boku</option>
+                  <option value="top">Z góry</option>
+                  <option value="all">Wszystkie</option>
                 </select>
-                <button onClick={handleGenerateProjection} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-sm font-semibold" title="Generate projection views">
-                  Project
+                <button onClick={handleGenerateProjection} className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-sm font-semibold" title="Generuj rzuty">
+                  Rzutuj
                 </button>
-                <button onClick={handleClearProjections} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Clear projections">
+                <button onClick={handleClearProjections} className="px-3 py-1 bg-red-600 hover:bg-red-700 rounded-r-md text-sm font-semibold" title="Usuń rzuty">
                   ×
                 </button>
               </div>
               <button
                 onClick={() => setIsPreviewMode(!isPreviewMode)}
                 className={`px-3 py-1 rounded-md text-sm font-semibold flex items-center space-x-1 ${isPreviewMode ? 'bg-indigo-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-                title="Toggle Print Preview"
+                title="Podgląd wydruku"
               >
                 <PrintPreviewIcon />
-                <span>Preview</span>
+                <span>Podgląd</span>
               </button>
               <button onClick={() => setIsExportPanelOpen(true)} className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded-md text-sm font-semibold">
-                Export
+                Eksport
               </button>
             </div>
         </header>
@@ -1267,7 +1279,7 @@ const App: React.FC = () => {
         />
         {/* Layers Panel */}
         <div>
-            <h2 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Layers</h2>
+            <h2 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Warstwy</h2>
             <div className="space-y-2">
               {drawingState.layers.map(layer => (
                 <div key={layer.id} className={`p-2 rounded-md flex items-center justify-between transition-colors ${activeLayerId === layer.id ? 'bg-sky-800' : 'bg-gray-800'}`}>
@@ -1276,10 +1288,10 @@ const App: React.FC = () => {
                     <span className="text-sm">{layer.name}</span>
                   </button>
                   <div className="flex items-center space-x-2">
-                    <button onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? 'Unlock' : 'Lock'}>
+                    <button onClick={() => toggleLayerLock(layer.id)} title={layer.locked ? 'Odblokuj' : 'Zablokuj'}>
                       {layer.locked ? <LockedIcon /> : <UnlockedIcon />}
                     </button>
-                    <button onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible ? 'Hide' : 'Show'}>
+                    <button onClick={() => toggleLayerVisibility(layer.id)} title={layer.visible ? 'Ukryj' : 'Pokaż'}>
                       {layer.visible ? <VisibleIcon /> : <HiddenIcon />}
                     </button>
                   </div>
@@ -1296,7 +1308,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-sm text-gray-100">
             <h2 className="text-lg font-bold mb-4">
-              {pendingAnnotation?.type === 'leader' ? 'Enter Leader Text' : 'Enter Text'}
+              {pendingAnnotation?.type === 'leader' ? 'Tekst odnośnika' : 'Wprowadź tekst'}
             </h2>
             <input
               type="text"
@@ -1306,7 +1318,7 @@ const App: React.FC = () => {
                 if (e.key === 'Enter') handleTextDialogSubmit();
                 if (e.key === 'Escape') handleTextDialogCancel();
               }}
-              placeholder="Enter text..."
+              placeholder="Wpisz tekst..."
               className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500 mb-4"
               autoFocus
             />
@@ -1315,7 +1327,7 @@ const App: React.FC = () => {
                 onClick={handleTextDialogCancel}
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-md font-semibold"
               >
-                Cancel
+                Anuluj
               </button>
               <button
                 onClick={handleTextDialogSubmit}
@@ -1342,11 +1354,11 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
   if (selectedIds.size !== 1) {
     return (
         <div>
-            <h2 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Properties</h2>
+            <h2 className="text-lg font-semibold mb-3 border-b border-gray-700 pb-2">Właściwości</h2>
             <p className="text-xs text-gray-400">
-              Select a single element to see its properties.
+              Zaznacz element aby zobaczyć właściwości.
               <br/>
-              Click and drag an element on the canvas to move it.
+              Przeciągnij element aby go przesunąć.
             </p>
         </div>
     );
@@ -1394,44 +1406,53 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
     </>
   );
 
-  // Określ typ elementu
-  const elementType = 'type' in element ? element.type : ('offset' in element ? 'dimension' : 'unknown');
+  // Określ typ elementu - polskie nazwy
+  const typeNames: Record<string, string> = {
+    line: 'Linia',
+    circle: 'Okrąg',
+    rectangle: 'Prostokąt',
+    dimension: 'Wymiar',
+    text: 'Tekst',
+    leader: 'Odnośnik',
+  };
+  const rawType = 'type' in element ? element.type : ('offset' in element ? 'dimension' : 'unknown');
+  const elementType = typeNames[rawType] || rawType;
 
   return (
     <div>
       <div className="flex justify-between items-center mb-3 border-b border-gray-700 pb-2">
-        <h2 className="text-lg font-semibold">Properties</h2>
+        <h2 className="text-lg font-semibold">Właściwości</h2>
         {'type' in element && (element.type === 'circle' || element.type === 'rectangle') && (
-            <button onClick={() => onAutoDimension(element.id)} title="Auto Dimension" className="p-1 rounded-md bg-sky-700 hover:bg-sky-600">
+            <button onClick={() => onAutoDimension(element.id)} title="Auto wymiarowanie" className="p-1 rounded-md bg-sky-700 hover:bg-sky-600">
                 <AutoDimensionIcon />
             </button>
         )}
       </div>
 
       <div className="space-y-2">
-        <p className="text-sm text-gray-300 capitalize">{elementType}</p>
+        <p className="text-sm text-gray-300">{elementType}</p>
         
         {/* Shape: Line */}
         {'type' in element && element.type === 'line' && (
             <>
-                {renderPointInputs('Start Point', 'p1', element.p1)}
-                {renderPointInputs('End Point', 'p2', element.p2)}
+                {renderPointInputs('Punkt początkowy', 'p1', element.p1)}
+                {renderPointInputs('Punkt końcowy', 'p2', element.p2)}
             </>
         )}
         
         {/* Shape: Rectangle */}
         {'type' in element && element.type === 'rectangle' && (
             <>
-                {renderPointInputs('Origin Corner (X0, Y0)', 'p1', element.p1)}
-                <div className="font-semibold text-xs text-gray-400 mt-2">Size (mm)</div>
+                {renderPointInputs('Narożnik (X0, Y0)', 'p1', element.p1)}
+                <div className="font-semibold text-xs text-gray-400 mt-2">Rozmiar (mm)</div>
                 <div className="grid grid-cols-2 gap-2">
                     <NumberInput
-                        label="Width"
+                        label="Szerokość"
                         value={Math.abs(element.p2.x - element.p1.x)}
                         onChange={val => handleRectangleDimensionChange('width', val)}
                     />
                     <NumberInput
-                        label="Height"
+                        label="Wysokość"
                         value={Math.abs(element.p2.y - element.p1.y)}
                         onChange={val => handleRectangleDimensionChange('height', val)}
                     />
@@ -1442,8 +1463,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
         {/* Shape: Circle */}
         {'type' in element && element.type === 'circle' && (
             <>
-                {renderPointInputs('Center', 'center', element.center)}
-                <div className="font-semibold text-xs text-gray-400 mt-2">Radius</div>
+                {renderPointInputs('Środek', 'center', element.center)}
+                <div className="font-semibold text-xs text-gray-400 mt-2">Promień</div>
                 <NumberInput label="R" value={element.radius} onChange={val => handleValueChange('radius', val)} />
             </>
         )}
@@ -1451,7 +1472,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
         {/* Dimension */}
         {'offset' in element && (
             <>
-                <div className="font-semibold text-xs text-gray-400 mt-2">Dimension Text</div>
+                <div className="font-semibold text-xs text-gray-400 mt-2">Tekst wymiaru</div>
                  <input
                     type="text"
                     defaultValue={(element as Dimension).text || ''}
@@ -1460,7 +1481,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                     className="w-full bg-gray-700 p-1.5 text-sm rounded-md border border-gray-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
-                 <div className="font-semibold text-xs text-gray-400 mt-2">Offset</div>
+                 <div className="font-semibold text-xs text-gray-400 mt-2">Odsunięcie</div>
                 <NumberInput label="Offset" value={(element as Dimension).offset} onChange={val => handleValueChange('offset', val)} />
             </>
         )}
@@ -1468,8 +1489,8 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
         {/* Annotation: Text */}
         {'type' in element && element.type === 'text' && (
             <>
-                {renderPointInputs('Position', 'position', (element as TextAnnotation).position)}
-                <div className="font-semibold text-xs text-gray-400 mt-2">Text</div>
+                {renderPointInputs('Pozycja', 'position', (element as TextAnnotation).position)}
+                <div className="font-semibold text-xs text-gray-400 mt-2">Tekst</div>
                 <input
                     type="text"
                     defaultValue={(element as TextAnnotation).text}
@@ -1477,13 +1498,13 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
                     onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
                     className="w-full bg-gray-700 p-1.5 text-sm rounded-md border border-gray-600 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
-                <div className="font-semibold text-xs text-gray-400 mt-2">Font Size</div>
+                <div className="font-semibold text-xs text-gray-400 mt-2">Rozmiar czcionki</div>
                 <NumberInput 
-                    label="Size" 
+                    label="Rozmiar" 
                     value={(element as TextAnnotation).fontSize || 14} 
                     onChange={val => handleValueChange('fontSize', val)} 
                 />
-                <div className="font-semibold text-xs text-gray-400 mt-2">Color</div>
+                <div className="font-semibold text-xs text-gray-400 mt-2">Kolor</div>
                 <input
                     type="color"
                     value={(element as TextAnnotation).color || '#fbbf24'}
@@ -1496,7 +1517,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ selectedIds, drawingS
         {/* Annotation: Leader */}
         {'type' in element && element.type === 'leader' && (
             <>
-                <div className="font-semibold text-xs text-gray-400 mt-2">Text</div>
+                <div className="font-semibold text-xs text-gray-400 mt-2">Tekst</div>
                 <input
                     type="text"
                     defaultValue={(element as LeaderAnnotation).text}
@@ -1572,19 +1593,19 @@ const ExportPanel: React.FC<ExportPanelProps> = ({ drawingState, onClose, titleB
   return (
     <div className="absolute inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md text-gray-100">
-        <h2 className="text-2xl font-bold mb-6">Export Drawing</h2>
+        <h2 className="text-2xl font-bold mb-6">Eksportuj rysunek</h2>
         
         <div className="space-y-4 mb-6">
-          <input type="text" name="detailName" value={titleBlock.detailName} onChange={handleInputChange} placeholder="Detail Name" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
-          <input type="text" name="material" value={titleBlock.material} onChange={handleInputChange} placeholder="Material" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
-          <input type="text" name="thickness" value={titleBlock.thickness} onChange={handleInputChange} placeholder="Thickness" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
-          <input type="text" name="author" value={titleBlock.author} onChange={handleInputChange} placeholder="Author" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
+          <input type="text" name="detailName" value={titleBlock.detailName} onChange={handleInputChange} placeholder="Nazwa detalu" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
+          <input type="text" name="material" value={titleBlock.material} onChange={handleInputChange} placeholder="Materiał" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
+          <input type="text" name="thickness" value={titleBlock.thickness} onChange={handleInputChange} placeholder="Grubość" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
+          <input type="text" name="author" value={titleBlock.author} onChange={handleInputChange} placeholder="Autor" className="w-full bg-gray-700 p-2 rounded-md border border-gray-600 focus:outline-none focus:ring-2 focus:ring-sky-500"/>
         </div>
 
         <div className="flex justify-end space-x-4">
-          <button onClick={handleExportPdf} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold">Export PDF</button>
-          <button onClick={handleExportDxf} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold">Export DXF</button>
-          <button onClick={onClose} className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md font-semibold">Cancel</button>
+          <button onClick={handleExportPdf} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold">Eksport PDF</button>
+          <button onClick={handleExportDxf} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md font-semibold">Eksport DXF</button>
+          <button onClick={onClose} className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded-md font-semibold">Anuluj</button>
         </div>
       </div>
     </div>

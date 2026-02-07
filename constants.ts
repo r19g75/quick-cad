@@ -13,9 +13,9 @@ export const LAYER_COLORS = {
 };
 
 export const INITIAL_LAYERS: Layer[] = [
-  { id: 'contour', name: 'Contour', color: LAYER_COLORS.contour, visible: true, locked: false },
-  { id: 'dimensions', name: 'Dimensions', color: LAYER_COLORS.dimensions, visible: true, locked: false },
-  { id: 'annotations', name: 'Annotations', color: LAYER_COLORS.annotations, visible: true, locked: false },
-  { id: 'axes', name: 'Axes', color: LAYER_COLORS.axes, visible: true, locked: false },
-  { id: 'auxiliary', name: 'Auxiliary', color: LAYER_COLORS.auxiliary, visible: true, locked: false },
+  { id: 'contour', name: 'Kontur', color: LAYER_COLORS.contour, visible: true, locked: false },
+  { id: 'dimensions', name: 'Wymiary', color: LAYER_COLORS.dimensions, visible: true, locked: false },
+  { id: 'annotations', name: 'Adnotacje', color: LAYER_COLORS.annotations, visible: true, locked: false },
+  { id: 'axes', name: 'Osie', color: LAYER_COLORS.axes, visible: true, locked: false },
+  { id: 'auxiliary', name: 'Pomocnicze', color: LAYER_COLORS.auxiliary, visible: true, locked: false },
 ];

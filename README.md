@@ -5,9 +5,9 @@ Lekka, przeglądarkowa aplikacja CAD 2D do szybkich rysunków technicznych czę�
 ## Funkcje
 
 - Narzędzia rysowania: Linia, Okrąg, Prostokąt
-- Wymiarowanie z auto-wymiarowaniem
+- Wymiarowanie z auto-wymiarowaniem (bez duplikatów)
 - Adnotacje: Tekst, Odnośnik
-- **Rzutowanie**: widok z boku, z góry, wszystkie (z liniami symetrii wg norm)
+- Rzutowanie: widok z boku, z góry, wszystkie (z liniami symetrii)
 - Zarządzanie warstwami
 - Eksport do PDF i DXF
 - Tryb offline (Service Worker)

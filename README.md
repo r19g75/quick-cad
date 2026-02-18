@@ -1,26 +1,23 @@
 # Quick-CAD 2D
 
-Lekka, przeglądarkowa aplikacja CAD 2D do szybkich rysunków technicznych części mechanicznych.
+Lekka, przeglądarkowa aplikacja CAD 2D do szybkich rysunków technicznych.
 
 ## Funkcje
 
-- Narzędzia rysowania: Linia, Okrąg, Prostokąt
-- Wymiarowanie z auto-wymiarowaniem (bez duplikatów)
-- Adnotacje: Tekst, Odnośnik
-- Rzutowanie: widok z boku, z góry, wszystkie (z liniami symetrii)
-- Zarządzanie warstwami
-- Eksport do PDF i DXF
-- Tryb offline (Service Worker)
-- Zapis/Odczyt plików .qcad
+- Narzędzia: Linia, Okrąg, Prostokąt, Wymiar, Tekst, Odnośnik
+- Auto-wymiarowanie
+- Rzutowanie ortogonalne z liniami symetrii
+- Import z Blendera (plugin)
+- Eksport PDF/DXF
+- Podgląd wydruku z automatycznym skalowaniem
 
-## Uruchomienie lokalne
+## Uruchomienie
 
-**Wymagania:** Node.js
+```bash
+npm install
+npm run dev
+```
 
-1. Zainstaluj zależności: `npm install`
-2. Uruchom: `npm run dev`
-3. Otwórz http://localhost:3000/quick-cad/
+## Plugin Blendera
 
-## Demo
-
-https://r19g75.github.io/quick-cad/
+Plik `quickcad_exporter.py` - eksportuje obiekty 3D do formatu .qcad

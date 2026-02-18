@@ -514,6 +514,7 @@ const App: React.FC = () => {
     ctx.clearRect(0, 0, width, height);
 
     if (isPreviewMode) {
+      // Oblicz wymiary "papieru" na ekranie (proporcje A4)
       const availableWidth = width - 2 * MARGIN;
       const availableHeight = height - 2 * MARGIN;
       const pageAspectRatio = A4_WIDTH / A4_HEIGHT;
@@ -530,6 +531,7 @@ const App: React.FC = () => {
       const paperX = (width - paperWidth) / 2;
       const paperY = (height - paperHeight) / 2;
 
+      // Rysuj białą kartkę
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(paperX, paperY, paperWidth, paperHeight);
       ctx.strokeStyle = '#9ca3af';
@@ -537,23 +539,144 @@ const App: React.FC = () => {
       ctx.strokeRect(paperX, paperY, paperWidth, paperHeight);
       ctx.setLineDash([]);
       
-      const layout = calculatePrintLayout(drawingState, paperWidth, paperHeight, 10);
+      // Oblicz bounding box rysunku w mm
+      const layout = calculatePrintLayout(drawingState, A4_WIDTH - 20, A4_HEIGHT - 35, 10);
+      
+      // Przelicznik: piksele ekranu na mm papieru
+      const screenToMm = paperWidth / A4_WIDTH;
+      
+      // Skala końcowa = skala layout (mm->mm) * przelicznik (mm->px)
+      const renderScale = layout.finalScale * screenToMm;
       
       ctx.save();
       ctx.translate(paperX, paperY);
-      ctx.translate(layout.offsetX, layout.offsetY);
-      ctx.scale(layout.finalScale, layout.finalScale);
       
-      // Temporarily override view zoom for drawing functions
-      const originalZoom = view.zoom;
-      setView(v => ({...v, zoom: layout.finalScale}));
-
-      drawingState.shapes.forEach(s => drawShape(ctx, s, false));
-      drawingState.dimensions.forEach(d => drawDimension(ctx, d, false));
-      drawingState.annotations.forEach(a => drawAnnotation(ctx, a, false));
+      // Przelicz offsety z mm na piksele ekranu
+      ctx.translate(layout.offsetX * screenToMm, layout.offsetY * screenToMm);
+      ctx.scale(renderScale, renderScale);
       
-      setView(v => ({...v, zoom: originalZoom}));
+      // Rysuj z odpowiednią grubością linii
+      const previewLineWidth = 1 / renderScale;
+      
+      drawingState.shapes.forEach(s => {
+        const layer = drawingState.layers.find(l => l.id === s.layerId);
+        if (!layer || !layer.visible) return;
+        
+        ctx.strokeStyle = layer.color === '#ffffff' ? '#000000' : layer.color;
+        ctx.lineWidth = previewLineWidth;
+        
+        if (s.layerId === 'axes') {
+          const dashLength = 10 / renderScale;
+          const dotLength = 2 / renderScale;
+          const gapLength = 4 / renderScale;
+          ctx.setLineDash([dashLength, gapLength, dotLength, gapLength]);
+        } else {
+          ctx.setLineDash([]);
+        }
+        
+        ctx.beginPath();
+        if (s.type === 'line') {
+          ctx.moveTo(s.p1.x, s.p1.y);
+          ctx.lineTo(s.p2.x, s.p2.y);
+        } else if (s.type === 'circle') {
+          ctx.arc(s.center.x, s.center.y, s.radius, 0, 2 * Math.PI);
+        } else if (s.type === 'rectangle') {
+          ctx.rect(s.p1.x, s.p1.y, s.p2.x - s.p1.x, s.p2.y - s.p1.y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+      
+      // Wymiary
+      const dimLayer = drawingState.layers.find(l => l.id === 'dimensions');
+      if (dimLayer && dimLayer.visible) {
+        ctx.strokeStyle = dimLayer.color === '#ffffff' ? '#000000' : dimLayer.color;
+        ctx.fillStyle = dimLayer.color === '#ffffff' ? '#000000' : dimLayer.color;
+        ctx.lineWidth = previewLineWidth;
+        
+        const fontSize = Math.max(8, 12 / renderScale);
+        ctx.font = `${fontSize}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        
+        drawingState.dimensions.forEach(dim => {
+          const { p1, p2, offset, text } = dim;
+          const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+          const perpAngle = angle + Math.PI / 2;
+          const dx = Math.cos(perpAngle) * offset;
+          const dy = Math.sin(perpAngle) * offset;
+          
+          const dimP1 = { x: p1.x + dx, y: p1.y + dy };
+          const dimP2 = { x: p2.x + dx, y: p2.y + dy };
+          const midPoint = { x: (dimP1.x + dimP2.x) / 2, y: (dimP1.y + dimP2.y) / 2 };
+          
+          // Linie pomocnicze
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y);
+          ctx.lineTo(dimP1.x, dimP1.y);
+          ctx.moveTo(p2.x, p2.y);
+          ctx.lineTo(dimP2.x, dimP2.y);
+          ctx.stroke();
+          
+          // Linia wymiarowa
+          ctx.beginPath();
+          ctx.moveTo(dimP1.x, dimP1.y);
+          ctx.lineTo(dimP2.x, dimP2.y);
+          ctx.stroke();
+          
+          // Tekst
+          const dimText = text || getDistance(p1, p2).toFixed(1);
+          ctx.save();
+          ctx.translate(midPoint.x, midPoint.y);
+          let textAngle = angle;
+          if (textAngle > Math.PI / 2) textAngle -= Math.PI;
+          if (textAngle < -Math.PI / 2) textAngle += Math.PI;
+          ctx.rotate(textAngle);
+          ctx.fillText(dimText, 0, -3 / renderScale);
+          ctx.restore();
+        });
+      }
+      
+      // Adnotacje
+      drawingState.annotations.forEach(a => {
+        const layer = drawingState.layers.find(l => l.id === 'annotations');
+        if (!layer || !layer.visible) return;
+        
+        ctx.fillStyle = (a as any).color || layer.color;
+        ctx.strokeStyle = (a as any).color || layer.color;
+        ctx.lineWidth = previewLineWidth;
+        
+        if (a.type === 'text') {
+          const ta = a as TextAnnotation;
+          const fontSize = Math.max(6, (ta.fontSize || 14) / renderScale * 0.8);
+          ctx.font = `${fontSize}px ${ta.fontFamily || 'Arial'}`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(ta.text, ta.position.x, ta.position.y);
+        } else if (a.type === 'leader') {
+          const la = a as LeaderAnnotation;
+          ctx.beginPath();
+          ctx.moveTo(la.arrowPoint.x, la.arrowPoint.y);
+          ctx.lineTo(la.elbowPoint.x, la.elbowPoint.y);
+          ctx.lineTo(la.textPoint.x, la.textPoint.y);
+          ctx.stroke();
+          
+          const fontSize = Math.max(6, 12 / renderScale);
+          ctx.font = `${fontSize}px Arial`;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText(la.text, la.textPoint.x, la.textPoint.y - 2 / renderScale);
+        }
+      });
+      
       ctx.restore();
+      
+      // Pokaż informację o skali
+      ctx.fillStyle = '#666';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'left';
+      const scaleRatio = 1 / layout.finalScale;
+      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(1)}`, paperX + 10, paperY + paperHeight - 10);
 
     } else {
       drawGrid(ctx, width, height);

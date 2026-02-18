@@ -514,10 +514,20 @@ const App: React.FC = () => {
     ctx.clearRect(0, 0, width, height);
 
     if (isPreviewMode) {
+      // Wymiary A4 landscape w mm
+      const PAGE_WIDTH_MM = A4_WIDTH;  // 297
+      const PAGE_HEIGHT_MM = A4_HEIGHT; // 210
+      const PAGE_MARGIN_MM = 10;
+      const TITLE_BLOCK_HEIGHT_MM = 25;
+      
+      // Obszar na rysunek (bez marginesów i ramki tytułowej)
+      const DRAW_AREA_WIDTH_MM = PAGE_WIDTH_MM - 2 * PAGE_MARGIN_MM;  // 277
+      const DRAW_AREA_HEIGHT_MM = PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM - TITLE_BLOCK_HEIGHT_MM; // 165
+      
       // Oblicz wymiary "papieru" na ekranie (proporcje A4)
       const availableWidth = width - 2 * MARGIN;
       const availableHeight = height - 2 * MARGIN;
-      const pageAspectRatio = A4_WIDTH / A4_HEIGHT;
+      const pageAspectRatio = PAGE_WIDTH_MM / PAGE_HEIGHT_MM;
       
       let paperWidth, paperHeight;
       if (availableWidth / availableHeight > pageAspectRatio) {
@@ -530,29 +540,56 @@ const App: React.FC = () => {
 
       const paperX = (width - paperWidth) / 2;
       const paperY = (height - paperHeight) / 2;
+      
+      // Przelicznik: piksele ekranu na mm papieru
+      const pxPerMm = paperWidth / PAGE_WIDTH_MM;
 
       // Rysuj białą kartkę
       ctx.fillStyle = '#FFFFFF';
       ctx.fillRect(paperX, paperY, paperWidth, paperHeight);
-      ctx.strokeStyle = '#9ca3af';
-      ctx.setLineDash([5, 5]);
-      ctx.strokeRect(paperX, paperY, paperWidth, paperHeight);
+      
+      // Ramka zewnętrzna
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 1;
       ctx.setLineDash([]);
+      const frameX = paperX + PAGE_MARGIN_MM * pxPerMm;
+      const frameY = paperY + PAGE_MARGIN_MM * pxPerMm;
+      const frameW = DRAW_AREA_WIDTH_MM * pxPerMm;
+      const frameH = (PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM) * pxPerMm;
+      ctx.strokeRect(frameX, frameY, frameW, frameH);
       
-      // Oblicz bounding box rysunku w mm
-      const layout = calculatePrintLayout(drawingState, A4_WIDTH - 20, A4_HEIGHT - 35, 10);
+      // Ramka tytułowa (na dole)
+      const titleBlockY = frameY + frameH - TITLE_BLOCK_HEIGHT_MM * pxPerMm;
+      const titleBlockW = 90 * pxPerMm;
+      const titleBlockX = frameX + frameW - titleBlockW;
+      ctx.strokeRect(titleBlockX, titleBlockY, titleBlockW, TITLE_BLOCK_HEIGHT_MM * pxPerMm);
       
-      // Przelicznik: piksele ekranu na mm papieru
-      const screenToMm = paperWidth / A4_WIDTH;
+      // Tekst w ramce tytułowej
+      ctx.fillStyle = '#000000';
+      ctx.font = `${8 * pxPerMm}px Arial`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
+      const tbPadding = 2 * pxPerMm;
+      ctx.fillText(`${titleBlock.detailName}`, titleBlockX + tbPadding, titleBlockY + tbPadding);
+      ctx.font = `${6 * pxPerMm}px Arial`;
+      ctx.fillText(`Materiał: ${titleBlock.material}`, titleBlockX + tbPadding, titleBlockY + 10 * pxPerMm);
+      ctx.fillText(`Grubość: ${titleBlock.thickness}`, titleBlockX + tbPadding, titleBlockY + 15 * pxPerMm);
+      ctx.fillText(`Autor: ${titleBlock.author}`, titleBlockX + 50 * pxPerMm, titleBlockY + 10 * pxPerMm);
+      ctx.fillText(`Data: ${titleBlock.date}`, titleBlockX + 50 * pxPerMm, titleBlockY + 15 * pxPerMm);
       
-      // Skala końcowa = skala layout (mm->mm) * przelicznik (mm->px)
-      const renderScale = layout.finalScale * screenToMm;
+      // Oblicz layout rysunku (tylko dla obszaru rysunku, bez ramki tytułowej)
+      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM, 5);
+      
+      // Skala końcowa
+      const renderScale = layout.finalScale * pxPerMm;
+      
+      // Obszar rysunku na ekranie
+      const drawAreaX = frameX;
+      const drawAreaY = frameY;
       
       ctx.save();
-      ctx.translate(paperX, paperY);
-      
-      // Przelicz offsety z mm na piksele ekranu
-      ctx.translate(layout.offsetX * screenToMm, layout.offsetY * screenToMm);
+      ctx.translate(drawAreaX, drawAreaY);
+      ctx.translate(layout.offsetX * pxPerMm, layout.offsetY * pxPerMm);
       ctx.scale(renderScale, renderScale);
       
       // Rysuj z odpowiednią grubością linii
@@ -671,12 +708,13 @@ const App: React.FC = () => {
       
       ctx.restore();
       
-      // Pokaż informację o skali
-      ctx.fillStyle = '#666';
-      ctx.font = '12px Arial';
+      // Skala w ramce tytułowej
+      ctx.fillStyle = '#000000';
+      ctx.font = `${6 * pxPerMm}px Arial`;
       ctx.textAlign = 'left';
+      ctx.textBaseline = 'top';
       const scaleRatio = 1 / layout.finalScale;
-      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(1)}`, paperX + 10, paperY + paperHeight - 10);
+      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(1)}`, titleBlockX + tbPadding, titleBlockY + 20 * pxPerMm);
 
     } else {
       drawGrid(ctx, width, height);

@@ -519,11 +519,14 @@ const App: React.FC = () => {
       const PAGE_HEIGHT_MM = A4_HEIGHT; // 210
       const PAGE_MARGIN_MM = 10;
       const TITLE_BLOCK_HEIGHT_MM = 25;
-      const TITLE_BLOCK_GAP_MM = 5; // odstęp między rysunkiem a ramką
+      const TITLE_BLOCK_WIDTH_MM = 120;
+      const TITLE_BLOCK_GAP_MM = 8; // odstęp między rysunkiem a ramką
       
-      // Obszar na rysunek (bez marginesów i ramki tytułowej)
+      // Obszar na rysunek - MUSI być powyżej ramki tytułowej
+      // Szerokość: cała dostępna (ramka jest tylko w rogu)
+      // Wysokość: od góry do ramki tytułowej
       const DRAW_AREA_WIDTH_MM = PAGE_WIDTH_MM - 2 * PAGE_MARGIN_MM;  // 277
-      const DRAW_AREA_HEIGHT_MM = PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM - TITLE_BLOCK_HEIGHT_MM - TITLE_BLOCK_GAP_MM; // 160
+      const DRAW_AREA_HEIGHT_MM = PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM - TITLE_BLOCK_HEIGHT_MM - TITLE_BLOCK_GAP_MM; // ~147
       
       // Oblicz wymiary "papieru" na ekranie (proporcje A4)
       const availableWidth = width - 2 * MARGIN;
@@ -605,8 +608,8 @@ const App: React.FC = () => {
       ctx.fillText(`Autor: ${titleBlock.author || '-'}`, rightColX, titleBlockY + row1H + 5 * pxPerMm);
       ctx.fillText(`Data: ${titleBlock.date || '-'}`, rightColX, titleBlockY + row1H + 11 * pxPerMm);
       
-      // Oblicz layout rysunku (tylko dla obszaru rysunku, bez ramki tytułowej)
-      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM - 10, 5);
+      // Oblicz layout rysunku - używamy zdefiniowanego obszaru
+      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM, 0);
       
       // Skala końcowa
       const renderScale = layout.finalScale * pxPerMm;

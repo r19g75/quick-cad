@@ -107,8 +107,8 @@ export const exportToPdf = (
   
   // Prawa kolumna
   doc.text(`Autor: ${titleBlockData.author || '-'}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 5);
-  doc.text(`Data: ${titleBlockData.date || '-'}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 11);
-  doc.text(`Skala: 1:${(1/finalScale).toFixed(0)}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 17);
+  doc.text(`Data: ${titleBlockData.date || '-'}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 10);
+  doc.text(`Skala: 1:${(1/finalScale).toFixed(0)}`, titleBlockX + col1Width + 35, titleBlockY + row1Height + 5);
 
   // --- Draw Shapes ---
   drawingState.shapes.forEach(shape => {

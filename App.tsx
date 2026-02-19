@@ -746,15 +746,14 @@ const App: React.FC = () => {
       
       ctx.restore();
       
-      // Skala w ramce tytułowej (osobny wiersz pod datą)
+      // Skala w ramce tytułowej (obok Autor/Data)
       ctx.fillStyle = '#000000';
       ctx.font = `${5 * pxPerMm}px Arial`;
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
       const scaleRatio = 1 / layout.finalScale;
-      const rightColX2 = titleBlockX + 63 * pxPerMm;
-      const row1H2 = 10 * pxPerMm;
-      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(0)}`, rightColX2, titleBlockY + row1H2 + 11 * pxPerMm);
+      // Skala obok Autora (prawa strona prawej kolumny)
+      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(0)}`, titleBlockX + col1W + 35 * pxPerMm, titleBlockY + row1H + 5 * pxPerMm);
 
     } else {
       drawGrid(ctx, width, height);

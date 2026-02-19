@@ -559,27 +559,54 @@ const App: React.FC = () => {
       const frameH = (PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM) * pxPerMm;
       ctx.strokeRect(frameX, frameY, frameW, frameH);
       
-      // Ramka tytułowa (na dole)
+      // Ramka tytułowa (na dole) - większa i z podziałami
+      const TITLE_BLOCK_W_MM = 120;
       const titleBlockY = frameY + frameH - TITLE_BLOCK_HEIGHT_MM * pxPerMm;
-      const titleBlockW = 90 * pxPerMm;
+      const titleBlockW = TITLE_BLOCK_W_MM * pxPerMm;
       const titleBlockX = frameX + frameW - titleBlockW;
-      ctx.strokeRect(titleBlockX, titleBlockY, titleBlockW, TITLE_BLOCK_HEIGHT_MM * pxPerMm);
+      const titleBlockH = TITLE_BLOCK_HEIGHT_MM * pxPerMm;
       
-      // Tekst w ramce tytułowej
+      // Zewnętrzna ramka
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(titleBlockX, titleBlockY, titleBlockW, titleBlockH);
+      ctx.lineWidth = 1;
+      
+      // Podział poziomy (nazwa u góry, reszta na dole)
+      const row1H = 10 * pxPerMm;
+      ctx.beginPath();
+      ctx.moveTo(titleBlockX, titleBlockY + row1H);
+      ctx.lineTo(titleBlockX + titleBlockW, titleBlockY + row1H);
+      ctx.stroke();
+      
+      // Podziały pionowe w dolnej części
+      const col1W = 60 * pxPerMm;
+      ctx.beginPath();
+      ctx.moveTo(titleBlockX + col1W, titleBlockY + row1H);
+      ctx.lineTo(titleBlockX + col1W, titleBlockY + titleBlockH);
+      ctx.stroke();
+      
+      // Tekst - większa czcionka
       ctx.fillStyle = '#000000';
-      ctx.font = `${8 * pxPerMm}px Arial`;
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
-      const tbPadding = 2 * pxPerMm;
-      ctx.fillText(`${titleBlock.detailName}`, titleBlockX + tbPadding, titleBlockY + tbPadding);
-      ctx.font = `${6 * pxPerMm}px Arial`;
-      ctx.fillText(`Materiał: ${titleBlock.material}`, titleBlockX + tbPadding, titleBlockY + 10 * pxPerMm);
-      ctx.fillText(`Grubość: ${titleBlock.thickness}`, titleBlockX + tbPadding, titleBlockY + 15 * pxPerMm);
-      ctx.fillText(`Autor: ${titleBlock.author}`, titleBlockX + 50 * pxPerMm, titleBlockY + 10 * pxPerMm);
-      ctx.fillText(`Data: ${titleBlock.date}`, titleBlockX + 50 * pxPerMm, titleBlockY + 15 * pxPerMm);
+      ctx.textBaseline = 'middle';
+      
+      // Nazwa detalu (duża)
+      ctx.font = `bold ${7 * pxPerMm}px Arial`;
+      ctx.fillText(titleBlock.detailName || 'Bez nazwy', titleBlockX + 3 * pxPerMm, titleBlockY + row1H / 2);
+      
+      // Lewa kolumna
+      ctx.font = `${5 * pxPerMm}px Arial`;
+      const leftColX = titleBlockX + 3 * pxPerMm;
+      ctx.fillText(`Materiał: ${titleBlock.material || '-'}`, leftColX, titleBlockY + row1H + 5 * pxPerMm);
+      ctx.fillText(`Grubość: ${titleBlock.thickness || '-'}`, leftColX, titleBlockY + row1H + 11 * pxPerMm);
+      
+      // Prawa kolumna
+      const rightColX = titleBlockX + col1W + 3 * pxPerMm;
+      ctx.fillText(`Autor: ${titleBlock.author || '-'}`, rightColX, titleBlockY + row1H + 5 * pxPerMm);
+      ctx.fillText(`Data: ${titleBlock.date || '-'}`, rightColX, titleBlockY + row1H + 11 * pxPerMm);
       
       // Oblicz layout rysunku (tylko dla obszaru rysunku, bez ramki tytułowej)
-      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM - 5, 5);
+      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM - 10, 5);
       
       // Skala końcowa
       const renderScale = layout.finalScale * pxPerMm;
@@ -716,13 +743,15 @@ const App: React.FC = () => {
       
       ctx.restore();
       
-      // Skala w ramce tytułowej
+      // Skala w ramce tytułowej (osobny wiersz pod datą)
       ctx.fillStyle = '#000000';
-      ctx.font = `${6 * pxPerMm}px Arial`;
+      ctx.font = `${5 * pxPerMm}px Arial`;
       ctx.textAlign = 'left';
-      ctx.textBaseline = 'top';
+      ctx.textBaseline = 'middle';
       const scaleRatio = 1 / layout.finalScale;
-      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(1)}`, titleBlockX + tbPadding, titleBlockY + 20 * pxPerMm);
+      const rightColX2 = titleBlockX + 63 * pxPerMm;
+      const row1H2 = 10 * pxPerMm;
+      ctx.fillText(`Skala: 1:${scaleRatio.toFixed(0)}`, rightColX2, titleBlockY + row1H2 + 11 * pxPerMm);
 
     } else {
       drawGrid(ctx, width, height);

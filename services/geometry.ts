@@ -51,10 +51,17 @@ export const getDimensionGeometryBbox = (dim: Dimension): { minX: number, minY: 
     const dimP2 = {x: p2.x + dx, y: p2.y + dy};
 
     const extLength = 15; // Should match drawing constant
+    const textMargin = 20; // Margines na tekst wymiaru
     const extP1End = {x: p1.x + Math.cos(perpAngle)*(offset + extLength), y: p1.y + Math.sin(perpAngle)*(offset + extLength)};
     const extP2End = {x: p2.x + Math.cos(perpAngle)*(offset + extLength), y: p2.y + Math.sin(perpAngle)*(offset + extLength)};
+    
+    // Punkt środkowy linii wymiarowej z marginesem na tekst
+    const midX = (dimP1.x + dimP2.x) / 2;
+    const midY = (dimP1.y + dimP2.y) / 2;
+    const textPoint1 = {x: midX + Math.cos(perpAngle) * textMargin, y: midY + Math.sin(perpAngle) * textMargin};
+    const textPoint2 = {x: midX - Math.cos(perpAngle) * textMargin, y: midY - Math.sin(perpAngle) * textMargin};
 
-    const points = [p1, p2, dimP1, dimP2, extP1End, extP2End];
+    const points = [p1, p2, dimP1, dimP2, extP1End, extP2End, textPoint1, textPoint2];
     
     return points.reduce((acc, p) => ({
         minX: Math.min(acc.minX, p.x),

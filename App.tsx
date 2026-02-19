@@ -519,10 +519,11 @@ const App: React.FC = () => {
       const PAGE_HEIGHT_MM = A4_HEIGHT; // 210
       const PAGE_MARGIN_MM = 10;
       const TITLE_BLOCK_HEIGHT_MM = 25;
+      const TITLE_BLOCK_GAP_MM = 5; // odstęp między rysunkiem a ramką
       
       // Obszar na rysunek (bez marginesów i ramki tytułowej)
       const DRAW_AREA_WIDTH_MM = PAGE_WIDTH_MM - 2 * PAGE_MARGIN_MM;  // 277
-      const DRAW_AREA_HEIGHT_MM = PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM - TITLE_BLOCK_HEIGHT_MM; // 165
+      const DRAW_AREA_HEIGHT_MM = PAGE_HEIGHT_MM - 2 * PAGE_MARGIN_MM - TITLE_BLOCK_HEIGHT_MM - TITLE_BLOCK_GAP_MM; // 160
       
       // Oblicz wymiary "papieru" na ekranie (proporcje A4)
       const availableWidth = width - 2 * MARGIN;
@@ -578,7 +579,7 @@ const App: React.FC = () => {
       ctx.fillText(`Data: ${titleBlock.date}`, titleBlockX + 50 * pxPerMm, titleBlockY + 15 * pxPerMm);
       
       // Oblicz layout rysunku (tylko dla obszaru rysunku, bez ramki tytułowej)
-      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM, 5);
+      const layout = calculatePrintLayout(drawingState, DRAW_AREA_WIDTH_MM, DRAW_AREA_HEIGHT_MM - 5, 5);
       
       // Skala końcowa
       const renderScale = layout.finalScale * pxPerMm;
@@ -586,8 +587,15 @@ const App: React.FC = () => {
       // Obszar rysunku na ekranie
       const drawAreaX = frameX;
       const drawAreaY = frameY;
+      const drawAreaW = DRAW_AREA_WIDTH_MM * pxPerMm;
+      const drawAreaH = DRAW_AREA_HEIGHT_MM * pxPerMm;
       
+      // Clipping - rysunek nie wyjdzie poza swój obszar
       ctx.save();
+      ctx.beginPath();
+      ctx.rect(drawAreaX, drawAreaY, drawAreaW, drawAreaH);
+      ctx.clip();
+      
       ctx.translate(drawAreaX, drawAreaY);
       ctx.translate(layout.offsetX * pxPerMm, layout.offsetY * pxPerMm);
       ctx.scale(renderScale, renderScale);

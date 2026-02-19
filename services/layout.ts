@@ -70,8 +70,8 @@ export const calculatePrintLayout = (
     }
   }
 
-  // Dodaj padding wokół rysunku
-  const padding = 15;
+  // Dodaj padding wokół rysunku (większy dla wymiarów)
+  const padding = 40;
   minX -= padding;
   minY -= padding;
   maxX += padding;

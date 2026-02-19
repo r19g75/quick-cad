@@ -45,37 +45,70 @@ export const exportToPdf = (
 
   const pageWidth = pageSize === 'A4' ? A4_WIDTH : 420;
   const pageHeight = pageSize === 'A4' ? A4_HEIGHT : 297;
+  
+  // Wymiary ramki tytułowej (takie same jak w podglądzie)
+  const TITLE_BLOCK_HEIGHT = 25;
+  const TITLE_BLOCK_WIDTH = 120;
+  const TITLE_BLOCK_GAP = 8;
+  
+  // Obszar na rysunek - powyżej ramki tytułowej
   const availableWidth = pageWidth - 2 * MARGIN;
-  const availableHeight = pageHeight - MARGIN - 25; // Leave space for title block
+  const availableHeight = pageHeight - 2 * MARGIN - TITLE_BLOCK_HEIGHT - TITLE_BLOCK_GAP;
 
   const { finalScale, offsetX, offsetY } = calculatePrintLayout(
       drawingState,
       availableWidth,
       availableHeight,
-      MARGIN
+      0
   );
 
   const transform = (p: Point) => ({
-      x: p.x * finalScale + offsetX,
-      y: p.y * finalScale + offsetY
+      x: p.x * finalScale + offsetX + MARGIN,
+      y: p.y * finalScale + offsetY + MARGIN
   });
 
-  // --- Draw Frame and Title Block ---
+  // --- Draw Frame ---
   doc.setDrawColor('#000000');
   doc.setLineWidth(0.5);
   doc.rect(MARGIN, MARGIN, pageWidth - 2 * MARGIN, pageHeight - 2 * MARGIN);
   
-  const titleBlockY = pageHeight - MARGIN;
-  const titleBlockX = pageWidth - MARGIN;
-  doc.rect(titleBlockX - 80, titleBlockY - 20, 80, 20);
-  doc.setFontSize(8);
+  // --- Draw Title Block (120x25mm w prawym dolnym rogu) ---
+  const frameRight = pageWidth - MARGIN;
+  const frameBottom = pageHeight - MARGIN;
+  const titleBlockX = frameRight - TITLE_BLOCK_WIDTH;
+  const titleBlockY = frameBottom - TITLE_BLOCK_HEIGHT;
+  
+  // Zewnętrzna ramka
+  doc.setLineWidth(0.7);
+  doc.rect(titleBlockX, titleBlockY, TITLE_BLOCK_WIDTH, TITLE_BLOCK_HEIGHT);
+  doc.setLineWidth(0.3);
+  
+  // Podział poziomy (nazwa u góry 10mm, reszta 15mm)
+  const row1Height = 10;
+  doc.line(titleBlockX, titleBlockY + row1Height, titleBlockX + TITLE_BLOCK_WIDTH, titleBlockY + row1Height);
+  
+  // Podział pionowy w dolnej części (60mm + 60mm)
+  const col1Width = 60;
+  doc.line(titleBlockX + col1Width, titleBlockY + row1Height, titleBlockX + col1Width, frameBottom);
+  
+  // Tekst
   doc.setTextColor('#000000');
-  doc.text(`Detail: ${titleBlockData.detailName}`, titleBlockX - 78, titleBlockY - 16);
-  doc.text(`Material: ${titleBlockData.material}`, titleBlockX - 78, titleBlockY - 12);
-  doc.text(`Thickness: ${titleBlockData.thickness}`, titleBlockX - 78, titleBlockY - 8);
-  doc.text(`Author: ${titleBlockData.author}`, titleBlockX - 40, titleBlockY - 16);
-  doc.text(`Date: ${titleBlockData.date}`, titleBlockX - 40, titleBlockY - 12);
-  doc.text(`Scale: 1:${(1/finalScale).toFixed(2)}`, titleBlockX - 40, titleBlockY - 8);
+  
+  // Nazwa detalu (duża, bold)
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text(titleBlockData.detailName || 'Bez nazwy', titleBlockX + 3, titleBlockY + 7);
+  
+  // Lewa kolumna
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Materiał: ${titleBlockData.material || '-'}`, titleBlockX + 3, titleBlockY + row1Height + 5);
+  doc.text(`Grubość: ${titleBlockData.thickness || '-'}`, titleBlockX + 3, titleBlockY + row1Height + 11);
+  
+  // Prawa kolumna
+  doc.text(`Autor: ${titleBlockData.author || '-'}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 5);
+  doc.text(`Data: ${titleBlockData.date || '-'}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 11);
+  doc.text(`Skala: 1:${(1/finalScale).toFixed(0)}`, titleBlockX + col1Width + 3, titleBlockY + row1Height + 17);
 
   // --- Draw Shapes ---
   drawingState.shapes.forEach(shape => {
